@@ -2,14 +2,14 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
     <title>Stella - AR Star Map</title>
     
     <!-- PWA Meta Tags -->
     <meta name="description" content="Turn your room into a planetarium with AR">
     <meta name="theme-color" content="#000428">
     <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="Stella">
     <meta name="mobile-web-app-capable" content="yes">
     
@@ -2050,6 +2050,180 @@
 
         // Start the app
         init();
+
+        // Mobile Sensor Handler for Stella
+        function initMobileSensors() {
+            let isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+            let hasOrientation = false;
+            
+            // Debug panel to see what's happening
+            const debugPanel = document.getElementById('orientation-debug');
+            
+            // iOS 13+ requires permission request
+            if (isIOS && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                // Create a button to request permission
+                const permissionBtn = document.createElement('button');
+                permissionBtn.textContent = '🎯 Enable AR Mode';
+                permissionBtn.style.cssText = `
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    padding: 20px 40px;
+                    font-size: 18px;
+                    background: #4fb3ff;
+                    color: white;
+                    border: none;
+                    border-radius: 30px;
+                    z-index: 10000;
+                    cursor: pointer;
+                `;
+                document.body.appendChild(permissionBtn);
+                
+                permissionBtn.addEventListener('click', async () => {
+                    try {
+                        const response = await DeviceOrientationEvent.requestPermission();
+                        if (response === 'granted') {
+                            permissionBtn.remove();
+                            startOrientationTracking();
+                        } else {
+                            alert('Permission denied. AR features won\'t work without sensor access.');
+                        }
+                    } catch (error) {
+                        console.error('Permission request failed:', error);
+                        alert('Error requesting sensor permission. Try refreshing.');
+                    }
+                });
+            } else {
+                // Android or older iOS - just start tracking
+                startOrientationTracking();
+            }
+            
+            function startOrientationTracking() {
+                // Try multiple sensor APIs
+                
+                // 1. DeviceOrientationEvent (most common)
+                if (window.DeviceOrientationEvent) {
+                    window.addEventListener('deviceorientation', handleOrientation);
+                    
+                    // Check if it's actually working after 1 second
+                    setTimeout(() => {
+                        if (!hasOrientation) {
+                            console.log('DeviceOrientation not providing data, trying alternatives...');
+                            tryAbsoluteOrientation();
+                        }
+                    }, 1000);
+                }
+                
+                // 2. Try absolute orientation as fallback
+                function tryAbsoluteOrientation() {
+                    window.addEventListener('deviceorientationabsolute', handleAbsoluteOrientation);
+                }
+                
+                // 3. Also listen for device motion (for detecting if phone is moving)
+                if (window.DeviceMotionEvent) {
+                    window.addEventListener('devicemotion', handleMotion);
+                }
+            }
+            
+            function handleOrientation(event) {
+                // Check if we're getting real data
+                if (event.alpha === null && event.beta === null && event.gamma === null) {
+                    console.log('Null orientation values received');
+                    return;
+                }
+                
+                hasOrientation = true;
+                
+                // Convert iOS/Android differences
+                let compass = event.alpha; // 0-360 compass heading
+                let tilt = event.beta;     // -180 to 180 front-back tilt
+                let roll = event.gamma;    // -90 to 90 left-right tilt
+                
+                // iOS reports relative values, Android reports absolute
+                if (event.webkitCompassHeading !== undefined) {
+                    // iOS with compass
+                    compass = event.webkitCompassHeading;
+                } else if (event.absolute === false && event.alpha !== null) {
+                    // Relative orientation, need to calibrate
+                    compass = (360 - event.alpha) % 360;
+                }
+                
+                // Update your global variables
+                window.deviceAlpha = compass;
+                window.deviceBeta = tilt;
+                window.deviceGamma = roll;
+                
+                // Update debug display
+                if (debugPanel) {
+                    debugPanel.innerHTML = `
+                        📱 Mobile Sensors Active<br>
+                        Compass: ${Math.round(compass)}°<br>
+                        Tilt: ${Math.round(tilt)}°<br>
+                        Roll: ${Math.round(roll)}°<br>
+                        Platform: ${isIOS ? 'iOS' : 'Android'}
+                    `;
+                }
+                
+                // Call your star update function
+                if (typeof updateStarPositions === 'function') {
+                    updateStarPositions();
+                }
+            }
+            
+            function handleAbsoluteOrientation(event) {
+                if (!hasOrientation) {
+                    handleOrientation(event);
+                }
+            }
+            
+            function handleMotion(event) {
+                // Can use this for shake gestures or smoothing
+                const accel = event.accelerationIncludingGravity;
+                if (accel) {
+                    // Smooth out jittery sensor data
+                    // You can implement smoothing here if needed
+                }
+            }
+        }
+
+        // Initialize mobile sensors when page loads
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', initMobileSensors);
+        } else {
+            initMobileSensors();
+        }
+
+        // Also add visibility handler to pause when app is in background
+        document.addEventListener('visibilitychange', () => {
+            if (document.hidden) {
+                // Pause sensor updates to save battery
+                console.log('App backgrounded, pausing sensors');
+            } else {
+                // Resume sensors
+                console.log('App resumed');
+            }
+        });
+
+        // Add a calibration helper
+        function calibrateCompass() {
+            const instruction = document.createElement('div');
+            instruction.innerHTML = `
+                <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); 
+                            background: rgba(0,0,0,0.9); color: white; padding: 30px; 
+                            border-radius: 20px; text-align: center; z-index: 10000;">
+                    <h3>📱 Calibrate Compass</h3>
+                    <p>Move your phone in a figure-8 pattern</p>
+                    <br>
+                    <button onclick="this.parentElement.remove()" 
+                            style="padding: 10px 20px; background: #4fb3ff; 
+                                   color: white; border: none; border-radius: 20px;">
+                        Done
+                    </button>
+                </div>
+            `;
+            document.body.appendChild(instruction);
+        }
     </script>
 </body>
 </html>
