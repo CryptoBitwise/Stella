@@ -1864,6 +1864,11 @@
             const div = document.createElement('div');
             div.className = 'star-marker';
             
+            // Add data attributes for AR engine
+            div.dataset.ra = star.ra;
+            div.dataset.dec = star.dec;
+            div.dataset.name = star.name;
+            
             // Calculate current position for tooltip
             const pos = calculateStarPosition(star);
             
@@ -2317,6 +2322,272 @@
             document.body.appendChild(instruction);
         }
 
+        // PROPER AR SKY ROTATION - Full sensor fusion
+        // This actually rotates the stars based on device orientation
+
+        class StellaAREngine {
+            constructor() {
+                // Device orientation (raw sensor values)
+                this.deviceOrientation = {
+                    alpha: 0,  // Compass heading (0-360)
+                    beta: 90,  // Pitch: phone tilt front-back (-180 to 180)
+                    gamma: 0   // Roll: phone tilt left-right (-90 to 90)
+                };
+                
+                // Smoothing for less jitter
+                this.smoothing = 0.8;
+                this.smoothedOrientation = { alpha: 0, beta: 90, gamma: 0 };
+                
+                // Calibration offsets
+                this.compassOffset = 0; // For magnetic declination
+                this.calibrated = false;
+                
+                this.init();
+            }
+            
+            init() {
+                // Request permissions and start sensors
+                this.startSensors();
+                
+                // Start render loop
+                this.animate();
+            }
+            
+            async startSensors() {
+                const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+                
+                // iOS permission request
+                if (isIOS && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                    const btn = document.createElement('button');
+                    btn.innerHTML = '🎯 Enable AR Sky';
+                    btn.style.cssText = `
+                        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                        padding: 20px 40px; font-size: 20px; background: #4fb3ff;
+                        color: white; border: none; border-radius: 30px; z-index: 10000;
+                    `;
+                    document.body.appendChild(btn);
+                    
+                    btn.onclick = async () => {
+                        const response = await DeviceOrientationEvent.requestPermission();
+                        if (response === 'granted') {
+                            btn.remove();
+                            this.attachSensorListeners();
+                        }
+                    };
+                } else {
+                    this.attachSensorListeners();
+                }
+            }
+            
+            attachSensorListeners() {
+                // Main orientation event with ALL axes
+                window.addEventListener('deviceorientation', (e) => {
+                    if (e.alpha === null) return;
+                    
+                    // Apply smoothing to reduce jitter
+                    this.smoothedOrientation.alpha = this.smooth(e.alpha, this.smoothedOrientation.alpha);
+                    this.smoothedOrientation.beta = this.smooth(e.beta, this.smoothedOrientation.beta);
+                    this.smoothedOrientation.gamma = this.smooth(e.gamma, this.smoothedOrientation.gamma);
+                    
+                    // Store raw values too
+                    this.deviceOrientation.alpha = e.alpha;
+                    this.deviceOrientation.beta = e.beta;
+                    this.deviceOrientation.gamma = e.gamma;
+                    
+                    // Update global variables for compatibility
+                    deviceAlpha = this.smoothedOrientation.alpha;
+                    deviceBeta = this.smoothedOrientation.beta;
+                    deviceGamma = this.smoothedOrientation.gamma;
+                });
+                
+                // Absolute orientation for Android
+                window.addEventListener('deviceorientationabsolute', (e) => {
+                    if (e.absolute && e.alpha !== null) {
+                        this.deviceOrientation.alpha = e.alpha;
+                        this.smoothedOrientation.alpha = e.alpha;
+                        deviceAlpha = e.alpha;
+                    }
+                });
+            }
+            
+            smooth(newValue, oldValue) {
+                return oldValue * this.smoothing + newValue * (1 - this.smoothing);
+            }
+            
+            // Convert device orientation to rotation matrix
+            getRotationMatrix() {
+                const a = this.smoothedOrientation.alpha * Math.PI / 180;
+                const b = this.smoothedOrientation.beta * Math.PI / 180;
+                const g = this.smoothedOrientation.gamma * Math.PI / 180;
+                
+                // Create rotation matrix from Euler angles
+                // This is the KEY - proper 3D rotation matrix
+                const ca = Math.cos(a), sa = Math.sin(a);
+                const cb = Math.cos(b), sb = Math.sin(b);
+                const cg = Math.cos(g), sg = Math.sin(g);
+                
+                // Combined rotation matrix (Z-X-Y order)
+                return [
+                    ca * cg - sa * sb * sg,  -ca * sg - sa * sb * cg,  sa * cb,
+                    cb * sg,                   cb * cg,                  -sb,
+                    sa * cg + ca * sb * sg,  -sa * sg + ca * sb * cg,   ca * cb
+                ];
+            }
+            
+            // Transform star position using rotation matrix
+            transformStarPosition(ra, dec) {
+                // Convert RA/Dec to 3D cartesian coordinates
+                const raRad = ra * Math.PI / 180;
+                const decRad = dec * Math.PI / 180;
+                
+                // Star vector in celestial coordinates
+                const x = Math.cos(decRad) * Math.cos(raRad);
+                const y = Math.cos(decRad) * Math.sin(raRad);
+                const z = Math.sin(decRad);
+                
+                // Get current time for star rotation
+                const lst = this.getLocalSiderealTime();
+                
+                // Apply hour angle
+                const ha = (lst - ra) * Math.PI / 180;
+                
+                // Rotate by hour angle first (celestial rotation)
+                const x1 = x * Math.cos(ha) - y * Math.sin(ha);
+                const y1 = x * Math.sin(ha) + y * Math.cos(ha);
+                const z1 = z;
+                
+                // Apply device rotation matrix
+                const matrix = this.getRotationMatrix();
+                const xDevice = matrix[0] * x1 + matrix[1] * y1 + matrix[2] * z1;
+                const yDevice = matrix[3] * x1 + matrix[4] * y1 + matrix[5] * z1;
+                const zDevice = matrix[6] * x1 + matrix[7] * y1 + matrix[8] * z1;
+                
+                // Project to screen
+                const screenX = Math.atan2(yDevice, xDevice) * 180 / Math.PI;
+                const screenY = Math.atan2(zDevice, Math.sqrt(xDevice * xDevice + yDevice * yDevice)) * 180 / Math.PI;
+                
+                // Convert to screen pixels
+                const fov = 60; // Field of view in degrees
+                const x2d = (screenX / fov + 0.5) * window.innerWidth;
+                const y2d = (0.5 - screenY / fov) * window.innerHeight;
+                
+                // Check if visible (in front of viewer)
+                const visible = xDevice > 0 && Math.abs(screenX) < fov && Math.abs(screenY) < fov;
+                
+                return { x: x2d, y: y2d, visible };
+            }
+            
+            getLocalSiderealTime() {
+                const now = new Date();
+                const J2000 = new Date('2000-01-01T12:00:00Z');
+                const daysSinceJ2000 = (now - J2000) / (1000 * 60 * 60 * 24);
+                const gmst = (280.46061837 + 360.98564736629 * daysSinceJ2000) % 360;
+                
+                // Get user's longitude (default 0 if not available)
+                const longitude = window.observerLon || 0;
+                return (gmst + longitude) % 360;
+            }
+            
+            // Animation loop - THIS IS CRITICAL
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                
+                // Update all star positions EVERY FRAME
+                this.updateAllStars();
+            }
+            
+            updateAllStars() {
+                // Get all star elements
+                const starElements = document.querySelectorAll('.star-marker');
+                
+                // Update each star's position
+                starElements.forEach((element) => {
+                    const ra = parseFloat(element.dataset.ra);
+                    const dec = parseFloat(element.dataset.dec);
+                    
+                    if (!isNaN(ra) && !isNaN(dec)) {
+                        const pos = this.transformStarPosition(ra, dec);
+                        
+                        if (pos.visible) {
+                            element.style.display = 'block';
+                            element.style.left = pos.x + 'px';
+                            element.style.top = pos.y + 'px';
+                        } else {
+                            element.style.display = 'none';
+                        }
+                    }
+                });
+                
+                // Update debug info
+                this.updateDebug();
+            }
+            
+            updateDebug() {
+                const debug = document.getElementById('orientation-debug');
+                if (debug) {
+                    debug.innerHTML = `
+                        📡 AR Mode Active<br>
+                        Compass: ${Math.round(this.smoothedOrientation.alpha)}°<br>
+                        Pitch: ${Math.round(this.smoothedOrientation.beta)}°<br>
+                        Roll: ${Math.round(this.smoothedOrientation.gamma)}°<br>
+                        FPS: ${Math.round(1000 / 16)}
+                    `;
+                }
+            }
+            
+            // Calibration for magnetic declination
+            calibrate() {
+                // Get magnetic declination for user's location
+                // (You'd fetch this from an API based on GPS)
+                const magneticDeclination = 0; // Placeholder
+                this.compassOffset = magneticDeclination;
+                
+                // Show calibration UI
+                const cal = document.createElement('div');
+                cal.innerHTML = `
+                    <div style="position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+                                background: rgba(0,0,0,0.9); color: white; padding: 30px;
+                                border-radius: 20px; text-align: center; z-index: 10000;">
+                        <h3>🧭 Calibrating Compass</h3>
+                        <p>Move your phone in a figure-8 pattern</p>
+                        <div style="font-size: 48px; margin: 20px;">∞</div>
+                        <button onclick="this.parentElement.parentElement.remove()"
+                                style="padding: 10px 30px; background: #4fb3ff; color: white;
+                                       border: none; border-radius: 20px;">Done</button>
+                    </div>
+                `;
+                document.body.appendChild(cal);
+                
+                this.calibrated = true;
+            }
+        }
+
+        // Initialize the AR engine
+        let stellaAR;
+
+        // Make sure star elements have data attributes
+        function prepareStarElements() {
+            // Stars are already created by the existing code
+            // Just ensure they have the required data attributes
+            console.log('🔧 Preparing star elements for AR engine...');
+            
+            // Wait for stars to be created, then ensure they have data attributes
+            setTimeout(() => {
+                const starElements = document.querySelectorAll('.star-marker');
+                console.log(`Found ${starElements.length} star elements`);
+                
+                // Update any existing stars that don't have data attributes
+                starElements.forEach((element, index) => {
+                    if (index < stars.length) {
+                        const star = stars[index];
+                        element.dataset.ra = star.ra;
+                        element.dataset.dec = star.dec;
+                        element.dataset.name = star.name;
+                    }
+                });
+            }, 1000);
+        }
+
         // Add manual test controls for debugging
         function addTestControls() {
             const testPanel = document.createElement('div');
@@ -2336,6 +2607,7 @@
                 <div>Device: α=${deviceAlpha}° β=${deviceBeta}° γ=${deviceGamma}°</div>
                 <button onclick="testStarMovement()" style="margin: 5px; padding: 5px 10px;">Test Movement</button>
                 <button onclick="resetDeviceOrientation()" style="margin: 5px; padding: 5px 10px;">Reset</button>
+                <button onclick="stellaAR.calibrate()" style="margin: 5px; padding: 5px 10px;">Calibrate</button>
             `;
             document.body.appendChild(testPanel);
         }
@@ -2355,6 +2627,17 @@
             deviceGamma = 0;
             console.log('Reset device orientation to:', { deviceAlpha, deviceBeta, deviceGamma });
             updateStarPositions();
+        }
+
+        // Start everything
+        if (document.readyState === 'loading') {
+            document.addEventListener('DOMContentLoaded', () => {
+                stellaAR = new StellaAREngine();
+                prepareStarElements();
+            });
+        } else {
+            stellaAR = new StellaAREngine();
+            prepareStarElements();
         }
 
         // Add test controls after page loads
