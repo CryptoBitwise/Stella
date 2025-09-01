@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Stella - Sensor Debug</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: linear-gradient(135deg, #000428, #004e92);
+            color: white;
+            padding: 20px;
+            margin: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .debug-box {
+            background: rgba(0,0,0,0.5);
+            padding: 30px;
+            border-radius: 20px;
+            max-width: 90%;
+            text-align: center;
+        }
+        
+        .sensor-value {
+            font-size: 24px;
+            margin: 15px 0;
+            padding: 15px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
+        }
+        
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        
+        .status.working { background: green; }
+        .status.not-working { background: red; }
+        .status.waiting { background: orange; }
+        
+        button {
+            padding: 15px 30px;
+            font-size: 18px;
+            background: #4fb3ff;
+            color: white;
+            border: none;
+            border-radius: 25px;
+            margin: 10px;
+            cursor: pointer;
+        }
+        
+        #ball {
+            width: 50px;
+            height: 50px;
+            background: #4fb3ff;
+            border-radius: 50%;
+            position: absolute;
+            transition: none;
+            box-shadow: 0 0 20px rgba(79, 179, 255, 0.8);
+        }
+    </style>
+</head>
+<body>
+    <div class="debug-box">
+        <h1>🔧 Stella Sensor Debug</h1>
+        
+        <div class="status waiting" id="status">
+            Waiting for sensor data...
+        </div>
+        
+        <div class="sensor-value">
+            Alpha (Compass): <span id="alpha">--</span>°
+        </div>
+        
+        <div class="sensor-value">
+            Beta (Tilt): <span id="beta">--</span>°
+        </div>
+        
+        <div class="sensor-value">
+            Gamma (Roll): <span id="gamma">--</span>°
+        </div>
+        
+        <div style="margin-top: 20px;">
+            <small>Events received: <span id="count">0</span></small><br>
+            <small>Sensor type: <span id="sensor-type">Unknown</span></small><br>
+            <small>Last update: <span id="last-update">Never</span></small>
+        </div>
+        
+        <button onclick="testSensors()">Test All Sensors</button>
+        <button onclick="requestPermissions()">Request Permissions</button>
+    </div>
+    
+    <div id="ball"></div>
+    
+    <script>
+        let eventCount = 0;
+        let lastAlpha = null;
+        let lastBeta = null;
+        let lastGamma = null;
+        
+        function updateDebug(alpha, beta, gamma, source) {
+            eventCount++;
+            
+            // Update display
+            document.getElementById('alpha').textContent = alpha ? alpha.toFixed(1) : 'null';
+            document.getElementById('beta').textContent = beta ? beta.toFixed(1) : 'null';
+            document.getElementById('gamma').textContent = gamma ? gamma.toFixed(1) : 'null';
+            document.getElementById('count').textContent = eventCount;
+            document.getElementById('sensor-type').textContent = source;
+            document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+            
+            // Check if we're getting real data
+            if (alpha !== null || beta !== null || gamma !== null) {
+                document.getElementById('status').className = 'status working';
+                document.getElementById('status').textContent = '✅ Sensors Working!';
+                
+                // Move the ball based on tilt
+                if (beta !== null && gamma !== null) {
+                    const ball = document.getElementById('ball');
+                    const x = (gamma / 90) * window.innerWidth/2 + window.innerWidth/2;
+                    const y = ((beta - 90) / 90) * window.innerHeight/2 + window.innerHeight/2;
+                    ball.style.left = x + 'px';
+                    ball.style.top = y + 'px';
+                }
+            }
+            
+            // Store last values
+            lastAlpha = alpha;
+            lastBeta = beta;
+            lastGamma = gamma;
+        }
+        
+        // Test 1: Standard DeviceOrientation
+        window.addEventListener('deviceorientation', (e) => {
+            console.log('deviceorientation event:', e);
+            updateDebug(e.alpha, e.beta, e.gamma, 'DeviceOrientation');
+        });
+        
+        // Test 2: Absolute DeviceOrientation
+        window.addEventListener('deviceorientationabsolute', (e) => {
+            console.log('deviceorientationabsolute event:', e);
+            if (eventCount < 10) { // Only use if regular orientation isn't working
+                updateDebug(e.alpha, e.beta, e.gamma, 'DeviceOrientationAbsolute');
+            }
+        });
+        
+        // Test 3: Device Motion
+        window.addEventListener('devicemotion', (e) => {
+            if (e.rotationRate) {
+                console.log('devicemotion rotation rate:', e.rotationRate);
+            }
+        });
+        
+        function testSensors() {
+            console.log('Testing all sensors...');
+            
+            // Check what's available
+            const report = {
+                'DeviceOrientationEvent': typeof DeviceOrientationEvent !== 'undefined',
+                'DeviceMotionEvent': typeof DeviceMotionEvent !== 'undefined',
+                'Gyroscope API': 'Gyroscope' in window,
+                'AbsoluteOrientationSensor': 'AbsoluteOrientationSensor' in window,
+                'RelativeOrientationSensor': 'RelativeOrientationSensor' in window,
+                'Has received events': eventCount > 0,
+                'User Agent': navigator.userAgent
+            };
+            
+            console.table(report);
+            alert('Check results:\n' + JSON.stringify(report, null, 2));
+        }
+        
+        async function requestPermissions() {
+            // For iOS 13+
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                try {
+                    const response = await DeviceOrientationEvent.requestPermission();
+                    alert('Permission response: ' + response);
+                } catch (e) {
+                    alert('Permission error: ' + e.message);
+                }
+            } 
+            // For Android - might need generic sensor permission
+            else if (navigator.permissions) {
+                try {
+                    const result = await navigator.permissions.query({ name: 'accelerometer' });
+                    alert('Accelerometer permission: ' + result.state);
+                } catch (e) {
+                    alert('No special permissions needed on this device');
+                }
+            } else {
+                alert('No permission request needed - sensors should work automatically');
+            }
+        }
+        
+        // Auto-test after 2 seconds
+        setTimeout(() => {
+            if (eventCount === 0) {
+                document.getElementById('status').className = 'status not-working';
+                document.getElementById('status').textContent = '❌ No sensor data received';
+                console.log('No sensor events after 2 seconds');
+            }
+        }, 2000);
+    </script>
+</body>
+</html>
