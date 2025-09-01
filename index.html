@@ -1912,6 +1912,9 @@
         }
 
         function updateStarPositions() {
+            console.log('🔄 Updating star positions with device:', { deviceAlpha, deviceBeta, deviceGamma });
+            
+            let visibleCount = 0;
             stars.forEach((star, index) => {
                 if (!starElements[index]) {
                     starElements[index] = createStarElement(star);
@@ -1921,13 +1924,27 @@
                 const element = starElements[index];
                 
                 if (pos.visible) {
+                    visibleCount++;
                     element.style.display = 'block';
                     element.style.left = `${pos.x}px`;
                     element.style.top = `${pos.y}px`;
+                    
+                    // Debug first few stars
+                    if (index < 3) {
+                        console.log(`⭐ Star ${star.name}:`, { 
+                            x: pos.x, 
+                            y: pos.y, 
+                            visible: pos.visible,
+                            altitude: pos.altitude,
+                            azimuth: pos.azimuth
+                        });
+                    }
                 } else {
                     element.style.display = 'none';
                 }
             });
+            
+            console.log(`🌟 ${visibleCount} stars visible out of ${stars.length}`);
             
             if (showConstellations) {
                 drawConstellationLines();
@@ -2179,48 +2196,57 @@
                 }
             }
             
-            function handleOrientation(event) {
-                // Handle null values gracefully with fallbacks
-                let compass = event.alpha || 0;
-                let tilt = event.beta || 90;
-                let roll = event.gamma || 0;
-                
-                // If we get any real data, mark as working
-                if (event.alpha !== null || event.beta !== null || event.gamma !== null) {
-                    hasOrientation = true;
-                    console.log('Received sensor data:', { alpha: event.alpha, beta: event.beta, gamma: event.gamma });
-                }
-                
-                // Convert iOS/Android differences
-                if (event.webkitCompassHeading !== undefined) {
-                    // iOS with compass
-                    compass = event.webkitCompassHeading;
-                } else if (event.absolute === false && event.alpha !== null) {
-                    // Relative orientation, need to calibrate
-                    compass = (360 - event.alpha) % 360;
-                }
-                
-                // Update global variables (always update, even with fallbacks)
-                deviceAlpha = compass;
-                deviceBeta = tilt;
-                deviceGamma = roll;
-                
-                // Update debug display
-                if (debugPanel) {
-                    debugPanel.innerHTML = `
-                        📱 Mobile Sensors Active<br>
-                        Compass: ${Math.round(compass)}°<br>
-                        Tilt: ${Math.round(tilt)}°<br>
-                        Roll: ${Math.round(roll)}°<br>
-                        Platform: ${isIOS ? 'iOS' : 'Android'}
-                    `;
-                }
-                
-                // Call your star update function
-                if (typeof updateStarPositions === 'function') {
-                    updateStarPositions();
-                }
+                    function handleOrientation(event) {
+            // Handle null values gracefully with fallbacks
+            let compass = event.alpha || 0;
+            let tilt = event.beta || 90;
+            let roll = event.gamma || 0;
+            
+            // If we get any real data, mark as working
+            if (event.alpha !== null || event.beta !== null || event.gamma !== null) {
+                hasOrientation = true;
+                console.log('🔄 Sensor update:', { 
+                    alpha: event.alpha, 
+                    beta: event.beta, 
+                    gamma: event.gamma,
+                    deviceAlpha: deviceAlpha,
+                    deviceBeta: deviceBeta
+                });
             }
+            
+            // Convert iOS/Android differences
+            if (event.webkitCompassHeading !== undefined) {
+                // iOS with compass
+                compass = event.webkitCompassHeading;
+            } else if (event.absolute === false && event.alpha !== null) {
+                // Relative orientation, need to calibrate
+                compass = (360 - event.alpha) % 360;
+            }
+            
+            // Update global variables (always update, even with fallbacks)
+            deviceAlpha = compass;
+            deviceBeta = tilt;
+            deviceGamma = roll;
+            
+            // Update debug display
+            if (debugPanel) {
+                debugPanel.innerHTML = `
+                    📱 Mobile Sensors Active<br>
+                    Compass: ${Math.round(compass)}°<br>
+                    Tilt: ${Math.round(tilt)}°<br>
+                    Roll: ${Math.round(roll)}°<br>
+                    Platform: ${isIOS ? 'iOS' : 'Android'}
+                `;
+            }
+            
+            // Force immediate star update
+            if (typeof updateStarPositions === 'function') {
+                console.log('🌟 Updating star positions...');
+                updateStarPositions();
+            } else {
+                console.error('❌ updateStarPositions function not found!');
+            }
+        }
             
             function handleAbsoluteOrientation(event) {
                 if (!hasOrientation) {
@@ -2256,6 +2282,21 @@
             }
         });
 
+        // Add continuous update loop to ensure smooth star movement
+        let updateInterval;
+        function startContinuousUpdates() {
+            // Update stars every 100ms for smooth movement
+            updateInterval = setInterval(() => {
+                if (typeof updateStarPositions === 'function') {
+                    updateStarPositions();
+                }
+            }, 100);
+            console.log('🔄 Continuous star updates started (100ms interval)');
+        }
+
+        // Start continuous updates after a short delay
+        setTimeout(startContinuousUpdates, 1000);
+
         // Add a calibration helper
         function calibrateCompass() {
             const instruction = document.createElement('div');
@@ -2275,6 +2316,49 @@
             `;
             document.body.appendChild(instruction);
         }
+
+        // Add manual test controls for debugging
+        function addTestControls() {
+            const testPanel = document.createElement('div');
+            testPanel.style.cssText = `
+                position: fixed;
+                top: 10px;
+                right: 10px;
+                background: rgba(0,0,0,0.8);
+                color: white;
+                padding: 15px;
+                border-radius: 10px;
+                font-size: 12px;
+                z-index: 10000;
+            `;
+            testPanel.innerHTML = `
+                <div><strong>🧪 Test Controls</strong></div>
+                <div>Device: α=${deviceAlpha}° β=${deviceBeta}° γ=${deviceGamma}°</div>
+                <button onclick="testStarMovement()" style="margin: 5px; padding: 5px 10px;">Test Movement</button>
+                <button onclick="resetDeviceOrientation()" style="margin: 5px; padding: 5px 10px;">Reset</button>
+            `;
+            document.body.appendChild(testPanel);
+        }
+
+        function testStarMovement() {
+            console.log('🧪 Testing star movement...');
+            // Simulate device movement
+            deviceAlpha = (deviceAlpha + 10) % 360;
+            deviceBeta = Math.max(0, Math.min(180, deviceBeta + 5));
+            console.log('New device orientation:', { deviceAlpha, deviceBeta, deviceGamma });
+            updateStarPositions();
+        }
+
+        function resetDeviceOrientation() {
+            deviceAlpha = 0;
+            deviceBeta = 90;
+            deviceGamma = 0;
+            console.log('Reset device orientation to:', { deviceAlpha, deviceBeta, deviceGamma });
+            updateStarPositions();
+        }
+
+        // Add test controls after page loads
+        setTimeout(addTestControls, 2000);
     </script>
 </body>
 </html>
