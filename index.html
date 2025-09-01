@@ -396,9 +396,8 @@
         </div>
     </div>
 
-    <script type="module">
-        // Import astronomy-engine for real celestial calculations
-        import * as Astronomy from 'https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.0/+esm';
+    <script>
+        // Simplified star positioning for Stella - no external libraries needed
         
         // PWA Variables
         let deferredPrompt;
@@ -1592,16 +1591,18 @@
         let starElements = [];
 
         // PWA Functions
+        // Comment out service worker registration until we fix it
         function registerServiceWorker() {
-            if ('serviceWorker' in navigator) {
-                navigator.serviceWorker.register('/sw.js')
-                    .then((registration) => {
-                        console.log('SW registered: ', registration);
-                    })
-                    .catch((registrationError) => {
-                        console.log('SW registration failed: ', registrationError);
-                    });
-            }
+            // if ('serviceWorker' in navigator) {
+            //     navigator.serviceWorker.register('/sw.js')
+            //         .then((registration) => {
+            //             console.log('SW registered: ', registration);
+            //         })
+            //         .catch((registrationError) => {
+            //             console.log('SW registration failed: ', registrationError);
+            //         });
+            // }
+            console.log('Service worker registration temporarily disabled');
         }
 
         function setupInstallPrompt() {
@@ -1729,22 +1730,53 @@
                 font-size: 14px;
                 z-index: 1000;
             `;
-            instructions.textContent = 'Hold Shift + Move mouse to look around (or tap/drag on mobile)';
+            instructions.innerHTML = 'Hold Shift + Move mouse to look around<br>Or use Arrow keys for precise control';
             document.body.appendChild(instructions);
             
-            // Also still try device orientation for phones
-            if (window.DeviceOrientationEvent) {
-                window.addEventListener('deviceorientation', (event) => {
-                    if (event.alpha !== null) {
-                        deviceAlpha = event.alpha;
-                        deviceBeta = event.beta || 90;
-                        deviceGamma = event.gamma || 0;
-                        updateStarPositions();
-                        updateDebugInfo();
-                        instructions.style.display = 'none';
-                    }
+            // Add keyboard controls for desktop
+            window.addEventListener('keydown', (event) => {
+                const step = 10;
+                switch(event.key) {
+                    case 'ArrowLeft':
+                        deviceAlpha = (deviceAlpha - step + 360) % 360;
+                        break;
+                    case 'ArrowRight':
+                        deviceAlpha = (deviceAlpha + step) % 360;
+                        break;
+                    case 'ArrowUp':
+                        deviceBeta = Math.max(0, deviceBeta - step);
+                        break;
+                    case 'ArrowDown':
+                        deviceBeta = Math.min(180, deviceBeta + step);
+                        break;
+                }
+                updateStarPositions();
+                updateDebugInfo();
+            });
+            
+                    // Also still try device orientation for phones
+        if (window.DeviceOrientationEvent) {
+            console.log('📱 DeviceOrientationEvent available, listening for sensor data...');
+            window.addEventListener('deviceorientation', (event) => {
+                console.log('📡 Received orientation event:', { 
+                    alpha: event.alpha, 
+                    beta: event.beta, 
+                    gamma: event.gamma,
+                    absolute: event.absolute 
                 });
-            }
+                
+                // Update even if some values are null
+                if (event.alpha !== null || event.beta !== null || event.gamma !== null) {
+                    deviceAlpha = event.alpha || deviceAlpha;
+                    deviceBeta = event.beta || deviceBeta;
+                    deviceGamma = event.gamma || deviceGamma;
+                    updateStarPositions();
+                    updateDebugInfo();
+                    instructions.style.display = 'none';
+                    console.log('✅ Updated device orientation:', { deviceAlpha, deviceBeta, deviceGamma });
+                }
+            });
+        }
         }
 
         function updateDebugInfo() {
@@ -1771,55 +1803,61 @@
         let currentTime = new Date();
 
         function calculateStarPosition(star) {
-            try {
-                // Create observer object
-                const observer = new Astronomy.Observer(observerLat, observerLon, 0);
-                
-                // Get current time
-                const time = new Astronomy.Time(currentTime);
-                
-                // Calculate where the star appears in the sky right now
-                const equ = new Astronomy.Equatorial(star.ra, star.dec, 0, 0, 0, 0);
-                const hor = Astronomy.EquatorToHorizon(time, observer, equ, Astronomy.Refraction.Normal);
-                
-                // Convert to screen coordinates
-                // Azimuth: 0° = North, 90° = East, 180° = South, 270° = West
-                // Altitude: 0° = horizon, 90° = zenith
-                
-                // Calculate difference from current device orientation
-                const azimuthDiff = (hor.azimuth - deviceAlpha + 360) % 360;
-                const altitudeDiff = hor.altitude - (deviceBeta - 90);
-                
-                // Convert to screen coordinates
-                const x = (azimuthDiff / 60) * window.innerWidth + window.innerWidth / 2;
-                const y = (-altitudeDiff / 60) * window.innerHeight + window.innerHeight / 2;
-                
-                // Check if star should be visible (within field of view and above horizon)
-                const visible = Math.abs(azimuthDiff) < 30 && 
-                              Math.abs(altitudeDiff) < 30 && 
-                              hor.altitude > -5; // 5° below horizon for atmospheric refraction
-                
-                return { 
-                    x, 
-                    y, 
-                    visible,
-                    azimuth: hor.azimuth,
-                    altitude: hor.altitude,
-                    magnitude: star.magnitude
-                };
-            } catch (error) {
-                console.error('Error calculating star position:', error);
-                // Fallback to simplified positioning
-                const azimuthDiff = (star.ra - deviceAlpha + 360) % 360;
-                const altitudeDiff = star.dec - (deviceBeta - 90);
-                
-                const x = (azimuthDiff / 60) * window.innerWidth + window.innerWidth / 2;
-                const y = (-altitudeDiff / 60) * window.innerHeight + window.innerHeight / 2;
-                
-                const visible = Math.abs(azimuthDiff) < 30 && Math.abs(altitudeDiff) < 30;
-                
-                return { x, y, visible, azimuth: star.ra, altitude: star.dec, magnitude: star.magnitude };
-            }
+            // Get current time for calculations
+            const now = new Date();
+            
+            // Calculate Local Sidereal Time (simplified)
+            const J2000 = new Date('2000-01-01T12:00:00Z');
+            const daysSinceJ2000 = (now - J2000) / (1000 * 60 * 60 * 24);
+            
+            // Greenwich Mean Sidereal Time (simplified calculation)
+            let gmst = (280.46061837 + 360.98564736629 * daysSinceJ2000) % 360;
+            
+            // Local Sidereal Time (using observer's longitude)
+            const lst = (gmst + observerLon) % 360;
+            
+            // Hour angle
+            const ha = (lst - star.ra) * Math.PI / 180;
+            
+            // Convert declination to radians
+            const decRad = star.dec * Math.PI / 180;
+            const latRad = observerLat * Math.PI / 180;
+            
+            // Calculate altitude (elevation above horizon)
+            const sinAlt = Math.sin(decRad) * Math.sin(latRad) + 
+                           Math.cos(decRad) * Math.cos(latRad) * Math.cos(ha);
+            const altitude = Math.asin(sinAlt) * 180 / Math.PI;
+            
+            // Calculate azimuth (compass direction)
+            const cosA = (Math.sin(decRad) - sinAlt * Math.sin(latRad)) / 
+                         (Math.cos(Math.asin(sinAlt)) * Math.cos(latRad));
+            const sinA = Math.sin(ha) * Math.cos(decRad) / Math.cos(Math.asin(sinAlt));
+            
+            let azimuth = Math.atan2(sinA, cosA) * 180 / Math.PI;
+            azimuth = (azimuth + 360) % 360;
+            
+            // Convert to screen position based on device orientation
+            const relativeAzimuth = azimuth - deviceAlpha;
+            const relativeAltitude = altitude - (90 - deviceBeta);
+            
+            // Normalize relative azimuth to -180 to 180
+            let normalizedAz = relativeAzimuth;
+            if (normalizedAz > 180) normalizedAz -= 360;
+            if (normalizedAz < -180) normalizedAz += 360;
+            
+            // Field of view (how much sky we can see)
+            const fieldOfView = 60; // degrees
+            
+            // Check if star is visible
+            const visible = altitude > 0 && // Above horizon
+                           Math.abs(normalizedAz) < fieldOfView && 
+                           Math.abs(relativeAltitude) < fieldOfView;
+            
+            // Convert to screen coordinates
+            const x = (normalizedAz / fieldOfView + 0.5) * window.innerWidth;
+            const y = (-relativeAltitude / fieldOfView + 0.5) * window.innerHeight;
+            
+            return { x, y, visible, altitude, azimuth, magnitude: star.magnitude };
         }
 
         function createStarElement(star) {
@@ -2031,6 +2069,7 @@
             // App setup
             await initCamera();
             initDeviceOrientation();
+            initMobileSensors(); // Initialize mobile sensors
             updateStarPositions();
             
             // Start time updates (every 10 seconds)
@@ -2050,6 +2089,20 @@
 
         // Start the app
         init();
+        
+        // Add ready message
+        console.log('🌟 Stella AR Star Map loaded successfully!');
+        console.log('📱 Mobile sensors:', window.DeviceOrientationEvent ? 'Supported' : 'Not supported');
+        console.log('🎮 Desktop controls: Hold Shift + mouse or use Arrow keys');
+        console.log('🔧 Debug tools: Open debug.html for sensor testing');
+        
+        // Add fallback message for users
+        setTimeout(() => {
+            console.log('💡 If sensors aren\'t working, use desktop controls:');
+            console.log('   - Hold Shift + move mouse to look around');
+            console.log('   - Use Arrow keys for precise control');
+            console.log('   - Touch/drag on mobile devices');
+        }, 2000);
 
         // Mobile Sensor Handler for Stella
         function initMobileSensors() {
@@ -2127,20 +2180,18 @@
             }
             
             function handleOrientation(event) {
-                // Check if we're getting real data
-                if (event.alpha === null && event.beta === null && event.gamma === null) {
-                    console.log('Null orientation values received');
-                    return;
+                // Handle null values gracefully with fallbacks
+                let compass = event.alpha || 0;
+                let tilt = event.beta || 90;
+                let roll = event.gamma || 0;
+                
+                // If we get any real data, mark as working
+                if (event.alpha !== null || event.beta !== null || event.gamma !== null) {
+                    hasOrientation = true;
+                    console.log('Received sensor data:', { alpha: event.alpha, beta: event.beta, gamma: event.gamma });
                 }
                 
-                hasOrientation = true;
-                
                 // Convert iOS/Android differences
-                let compass = event.alpha; // 0-360 compass heading
-                let tilt = event.beta;     // -180 to 180 front-back tilt
-                let roll = event.gamma;    // -90 to 90 left-right tilt
-                
-                // iOS reports relative values, Android reports absolute
                 if (event.webkitCompassHeading !== undefined) {
                     // iOS with compass
                     compass = event.webkitCompassHeading;
@@ -2149,10 +2200,10 @@
                     compass = (360 - event.alpha) % 360;
                 }
                 
-                // Update your global variables
-                window.deviceAlpha = compass;
-                window.deviceBeta = tilt;
-                window.deviceGamma = roll;
+                // Update global variables (always update, even with fallbacks)
+                deviceAlpha = compass;
+                deviceBeta = tilt;
+                deviceGamma = roll;
                 
                 // Update debug display
                 if (debugPanel) {

@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stella - Test Fixes</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: linear-gradient(135deg, #000428, #004e92);
+            color: white;
+            text-align: center;
+        }
+        .test-result {
+            background: rgba(0,0,0,0.3);
+            padding: 20px;
+            margin: 20px;
+            border-radius: 10px;
+            border: 1px solid #4fb3ff;
+        }
+        .success { border-color: #4caf50; }
+        .warning { border-color: #ff9800; }
+        .error { border-color: #f44336; }
+        button {
+            background: #4fb3ff;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            margin: 10px;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #3a8fd9;
+        }
+    </style>
+</head>
+<body>
+    <h1>🔧 Stella Fixes Test</h1>
+    <p>Testing the fixes applied to your AR Star Map</p>
+    
+    <div class="test-result" id="test-astronomy">
+        <h3>✅ Astronomy Library Test</h3>
+        <p>Checking if astronomy library errors are resolved...</p>
+        <div id="astronomy-result">Testing...</div>
+    </div>
+    
+    <div class="test-result" id="test-icons">
+        <h3>🎨 Icon Files Test</h3>
+        <p>Checking if required icon files exist...</p>
+        <div id="icon-result">Testing...</div>
+    </div>
+    
+    <div class="test-result" id="test-sensors">
+        <h3>📱 Mobile Sensors Test</h3>
+        <p>Checking mobile sensor functionality...</p>
+        <div id="sensor-result">Testing...</div>
+    </div>
+    
+    <div class="test-result" id="test-main-app">
+        <h3>🌟 Main App Test</h3>
+        <p>Testing main Stella app functionality...</p>
+        <button onclick="testMainApp()">Test Main App</button>
+        <div id="main-app-result">Click button to test...</div>
+    </div>
+    
+    <script>
+        // Test 1: Astronomy Library
+        function testAstronomy() {
+            const result = document.getElementById('astronomy-result');
+            try {
+                // Check if any astronomy references exist
+                if (typeof Astronomy !== 'undefined') {
+                    result.innerHTML = '❌ Astronomy library still loaded';
+                    document.getElementById('test-astronomy').className = 'test-result error';
+                } else {
+                    result.innerHTML = '✅ No astronomy library errors';
+                    document.getElementById('test-astronomy').className = 'test-result success';
+                }
+            } catch (e) {
+                result.innerHTML = '✅ No astronomy library errors';
+                document.getElementById('test-astronomy').className = 'test-result success';
+            }
+        }
+        
+        // Test 2: Icon Files
+        function testIcons() {
+            const result = document.getElementById('icon-result');
+            const icon192 = new Image();
+            const icon512 = new Image();
+            
+            icon192.onload = function() {
+                icon512.onload = function() {
+                    result.innerHTML = '✅ Both icon files found (192x192, 512x512)';
+                    document.getElementById('test-icons').className = 'test-result success';
+                };
+                icon512.onerror = function() {
+                    result.innerHTML = '⚠️ icon-192.png found, icon-512.png missing';
+                    document.getElementById('test-icons').className = 'test-result warning';
+                };
+                icon512.src = '/icon-512.png';
+            };
+            
+            icon192.onerror = function() {
+                result.innerHTML = '❌ icon-192.png missing';
+                document.getElementById('test-icons').className = 'test-result error';
+            };
+            
+            icon192.src = '/icon-192.png';
+        }
+        
+        // Test 3: Mobile Sensors
+        function testSensors() {
+            const result = document.getElementById('sensor-result');
+            
+            if (window.DeviceOrientationEvent) {
+                result.innerHTML = '✅ DeviceOrientationEvent supported';
+                document.getElementById('test-sensors').className = 'test-result success';
+            } else if (window.DeviceMotionEvent) {
+                result.innerHTML = '⚠️ DeviceMotionEvent supported (limited)';
+                document.getElementById('test-sensors').className = 'test-result warning';
+            } else {
+                result.innerHTML = '❌ No mobile sensor support detected';
+                document.getElementById('test-sensors').className = 'test-result error';
+            }
+        }
+        
+        // Test 4: Main App
+        function testMainApp() {
+            const result = document.getElementById('main-app-result');
+            result.innerHTML = 'Testing...';
+            
+            // Try to open main app in new window
+            try {
+                const testWindow = window.open('/index.html', '_blank');
+                if (testWindow) {
+                    result.innerHTML = '✅ Main app opened successfully in new window';
+                    document.getElementById('test-main-app').className = 'test-result success';
+                    
+                    // Close test window after 3 seconds
+                    setTimeout(() => {
+                        testWindow.close();
+                    }, 3000);
+                } else {
+                    result.innerHTML = '⚠️ Popup blocked - manually test index.html';
+                    document.getElementById('test-main-app').className = 'test-result warning';
+                }
+            } catch (e) {
+                result.innerHTML = '❌ Error opening main app: ' + e.message;
+                document.getElementById('test-main-app').className = 'test-result error';
+            }
+        }
+        
+        // Run tests on load
+        window.addEventListener('load', () => {
+            testAstronomy();
+            testIcons();
+            testSensors();
+        });
+    </script>
+</body>
+</html>

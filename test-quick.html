@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stella - Quick Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: linear-gradient(135deg, #000428, #004e92);
+            color: white;
+            text-align: center;
+        }
+        .test-box {
+            background: rgba(0,0,0,0.3);
+            padding: 20px;
+            margin: 20px;
+            border-radius: 10px;
+            border: 1px solid #4fb3ff;
+        }
+        button {
+            background: #4fb3ff;
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 25px;
+            cursor: pointer;
+            margin: 10px;
+            font-size: 16px;
+        }
+        button:hover {
+            background: #3a8fd9;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+            background: rgba(255,255,255,0.1);
+        }
+    </style>
+</head>
+<body>
+    <h1>🚀 Stella Quick Test</h1>
+    <p>Quick verification that your AR Star Map is working</p>
+    
+    <div class="test-box">
+        <h3>✅ Quick Tests</h3>
+        <button onclick="testMainApp()">Test Main App</button>
+        <button onclick="testIcons()">Test Icons</button>
+        <button onclick="testSensors()">Test Sensors</button>
+        <div id="results"></div>
+    </div>
+    
+    <div class="test-box">
+        <h3>📱 How to Test</h3>
+        <div class="status">
+            <strong>Desktop:</strong> Hold Shift + move mouse, or use Arrow keys
+        </div>
+        <div class="status">
+            <strong>Mobile:</strong> Point phone at sky, move around
+        </div>
+        <div class="status">
+            <strong>Debug:</strong> Open debug.html for detailed sensor testing
+        </div>
+    </div>
+    
+    <script>
+        function testMainApp() {
+            const results = document.getElementById('results');
+            results.innerHTML = 'Testing main app...';
+            
+            try {
+                const testWindow = window.open('/index.html', '_blank');
+                if (testWindow) {
+                    results.innerHTML = '✅ Main app opened successfully!<br>Check for console errors.';
+                    setTimeout(() => testWindow.close(), 3000);
+                } else {
+                    results.innerHTML = '⚠️ Popup blocked. Manually open index.html';
+                }
+            } catch (e) {
+                results.innerHTML = '❌ Error: ' + e.message;
+            }
+        }
+        
+        function testIcons() {
+            const results = document.getElementById('results');
+            results.innerHTML = 'Testing icons...';
+            
+            const icon192 = new Image();
+            const icon512 = new Image();
+            
+            let icon192Loaded = false;
+            let icon512Loaded = false;
+            
+            icon192.onload = function() {
+                icon192Loaded = true;
+                if (icon512Loaded) {
+                    results.innerHTML = '✅ Both icons loaded successfully!';
+                }
+            };
+            
+            icon512.onload = function() {
+                icon512Loaded = true;
+                if (icon192Loaded) {
+                    results.innerHTML = '✅ Both icons loaded successfully!';
+                }
+            };
+            
+            icon192.onerror = function() {
+                results.innerHTML = '❌ icon-192.png failed to load';
+            };
+            
+            icon512.onerror = function() {
+                results.innerHTML = '❌ icon-512.png failed to load';
+            };
+            
+            icon192.src = '/icon-192.png';
+            icon512.src = '/icon-512.png';
+        }
+        
+        function testSensors() {
+            const results = document.getElementById('results');
+            
+            if (window.DeviceOrientationEvent) {
+                results.innerHTML = '✅ DeviceOrientationEvent supported<br>Mobile sensors should work!';
+            } else if (window.DeviceMotionEvent) {
+                results.innerHTML = '⚠️ DeviceMotionEvent supported (limited)<br>Basic motion detection available';
+            } else {
+                results.innerHTML = '❌ No mobile sensor support<br>Use desktop controls (Shift + mouse or Arrow keys)';
+            }
+        }
+    </script>
+</body>
+</html>
