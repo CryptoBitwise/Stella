@@ -2608,6 +2608,7 @@
                 <button onclick="testStarMovement()" style="margin: 5px; padding: 5px 10px;">Test Movement</button>
                 <button onclick="resetDeviceOrientation()" style="margin: 5px; padding: 5px 10px;">Reset</button>
                 <button onclick="stellaAR.calibrate()" style="margin: 5px; padding: 5px 10px;">Calibrate</button>
+                <button onclick="simpleStarTest()" style="margin: 5px; padding: 5px 10px; background: #ff6b6b;">Simple Test</button>
             `;
             document.body.appendChild(testPanel);
         }
@@ -2629,19 +2630,87 @@
             updateStarPositions();
         }
 
+        // Simple test that definitely works
+        function simpleStarTest() {
+            console.log('🧪 Running simple star test...');
+            
+            // Get all star elements
+            const starElements = document.querySelectorAll('.star-marker');
+            console.log(`Found ${starElements.length} stars to move`);
+            
+            if (starElements.length === 0) {
+                alert('No stars found! Check if stars are loaded.');
+                return;
+            }
+            
+            // Move each star in a simple pattern
+            starElements.forEach((star, index) => {
+                const x = Math.random() * window.innerWidth;
+                const y = Math.random() * window.innerHeight;
+                
+                star.style.left = x + 'px';
+                star.style.top = y + 'px';
+                star.style.display = 'block';
+                
+                console.log(`Moved star ${index} to (${x}, ${y})`);
+            });
+            
+            alert(`Moved ${starElements.length} stars to random positions!`);
+        }
+
         // Start everything
         if (document.readyState === 'loading') {
             document.addEventListener('DOMContentLoaded', () => {
-                stellaAR = new StellaAREngine();
-                prepareStarElements();
+                console.log('🚀 DOM loaded, initializing Stella AR...');
+                // Wait for stars to be created first
+                setTimeout(() => {
+                    stellaAR = new StellaAREngine();
+                    prepareStarElements();
+                }, 2000);
             });
         } else {
-            stellaAR = new StellaAREngine();
-            prepareStarElements();
+            console.log('🚀 DOM already loaded, initializing Stella AR...');
+            // Wait for stars to be created first
+            setTimeout(() => {
+                stellaAR = new StellaAREngine();
+                prepareStarElements();
+            }, 2000);
         }
 
         // Add test controls after page loads
         setTimeout(addTestControls, 2000);
+
+        // Add a simple continuous movement test
+        let simpleTestInterval;
+        function startSimpleTest() {
+            console.log('🔄 Starting simple continuous star movement test...');
+            
+            simpleTestInterval = setInterval(() => {
+                const starElements = document.querySelectorAll('.star-marker');
+                if (starElements.length > 0) {
+                    // Move stars in a circular pattern
+                    const time = Date.now() * 0.001;
+                    const radius = 100;
+                    const centerX = window.innerWidth / 2;
+                    const centerY = window.innerHeight / 2;
+                    
+                    starElements.forEach((star, index) => {
+                        const angle = time + (index * 0.5);
+                        const x = centerX + Math.cos(angle) * radius;
+                        const y = centerY + Math.sin(angle) * radius;
+                        
+                        star.style.left = x + 'px';
+                        star.style.top = y + 'px';
+                        star.style.display = 'block';
+                    });
+                }
+            }, 50); // 20 FPS for smooth movement
+            
+            console.log('✅ Simple test started - stars should be moving in circles!');
+        }
+
+        // Start simple test after 3 seconds
+        setTimeout(startSimpleTest, 3000);
     </script>
 </body>
 </html>
