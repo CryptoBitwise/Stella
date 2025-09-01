@@ -2677,6 +2677,74 @@
             }, 2000);
         }
 
+        // IMMEDIATE TEST - This should work no matter what
+        console.log('🚀 Stella debug script loaded!');
+        
+        // Global error handler to catch any JavaScript errors
+        window.addEventListener('error', (event) => {
+            console.error('🚨 JavaScript Error:', event.error);
+            alert('JavaScript Error: ' + event.error.message);
+        });
+        
+        window.addEventListener('unhandledrejection', (event) => {
+            console.error('🚨 Unhandled Promise Rejection:', event.reason);
+            alert('Promise Error: ' + event.reason);
+        });
+        
+        // Add a simple button immediately
+        const immediateButton = document.createElement('button');
+        immediateButton.innerHTML = '🚨 EMERGENCY TEST';
+        immediateButton.style.cssText = `
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            padding: 20px 40px;
+            font-size: 24px;
+            background: #ff0000;
+            color: white;
+            border: none;
+            border-radius: 20px;
+            z-index: 99999;
+            cursor: pointer;
+        `;
+        immediateButton.onclick = () => {
+            alert('Button works! Now testing stars...');
+            testStarsImmediately();
+        };
+        document.body.appendChild(immediateButton);
+        console.log('✅ Emergency test button added!');
+
+        function testStarsImmediately() {
+            console.log('🧪 Testing stars immediately...');
+            
+            // Check if stars exist
+            const starElements = document.querySelectorAll('.star-marker');
+            console.log(`Found ${starElements.length} stars`);
+            
+            if (starElements.length === 0) {
+                alert('No stars found! The star system might not be working.');
+                return;
+            }
+            
+            // Move first few stars to visible positions
+            starElements.forEach((star, index) => {
+                if (index < 5) { // Only move first 5 stars
+                    const x = 100 + (index * 100);
+                    const y = 100 + (index * 50);
+                    
+                    star.style.left = x + 'px';
+                    star.style.top = y + 'px';
+                    star.style.display = 'block';
+                    star.style.background = 'red';
+                    
+                    console.log(`Moved star ${index} to (${x}, ${y})`);
+                }
+            });
+            
+            alert(`Moved ${Math.min(5, starElements.length)} stars! Check if you see red dots.`);
+        }
+
         // Add test controls after page loads
         setTimeout(addTestControls, 2000);
 
