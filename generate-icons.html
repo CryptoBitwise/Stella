@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generate App Icons</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .icon-preview {
+            display: inline-block;
+            margin: 10px;
+            text-align: center;
+        }
+        canvas {
+            border: 1px solid #ccc;
+            margin: 5px;
+        }
+        button {
+            background: #4fb3ff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px 5px;
+        }
+        button:hover {
+            background: #3a8fd9;
+        }
+    </style>
+</head>
+<body>
+    <h1>AR Star Map - Icon Generator</h1>
+    <p>Click the buttons below to generate and download app icons:</p>
+    
+    <button onclick="generateAllIcons()">Generate All Icons</button>
+    <button onclick="downloadAllIcons()">Download All Icons</button>
+    
+    <div id="icon-container"></div>
+
+    <script>
+        const iconSizes = [72, 96, 128, 144, 152, 192, 384, 512];
+        
+        function createIcon(size) {
+            const canvas = document.createElement('canvas');
+            canvas.width = size;
+            canvas.height = size;
+            const ctx = canvas.getContext('2d');
+            
+            // Create gradient background
+            const gradient = ctx.createRadialGradient(size/2, size/2, 0, size/2, size/2, size/2);
+            gradient.addColorStop(0, '#000428');
+            gradient.addColorStop(1, '#004e92');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, size, size);
+            
+            // Add stars
+            for (let i = 0; i < size/10; i++) {
+                const x = Math.random() * size;
+                const y = Math.random() * size;
+                const radius = Math.random() * (size/100) + 1;
+                const opacity = Math.random() * 0.8 + 0.2;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+                ctx.fill();
+            }
+            
+            // Add main star in center
+            const centerStarSize = size * 0.15;
+            ctx.beginPath();
+            ctx.arc(size/2, size/2, centerStarSize, 0, Math.PI * 2);
+            ctx.fillStyle = '#4fb3ff';
+            ctx.fill();
+            
+            // Add glow effect
+            ctx.shadowColor = '#4fb3ff';
+            ctx.shadowBlur = size * 0.1;
+            ctx.beginPath();
+            ctx.arc(size/2, size/2, centerStarSize * 0.7, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(79, 179, 255, 0.3)';
+            ctx.fill();
+            
+            return canvas;
+        }
+        
+        function generateAllIcons() {
+            const container = document.getElementById('icon-container');
+            container.innerHTML = '';
+            
+            iconSizes.forEach(size => {
+                const canvas = createIcon(size);
+                const div = document.createElement('div');
+                div.className = 'icon-preview';
+                div.innerHTML = `
+                    <h3>${size}x${size}</h3>
+                    <canvas id="canvas-${size}"></canvas>
+                    <br>
+                    <button onclick="downloadIcon(${size})">Download</button>
+                `;
+                container.appendChild(div);
+                
+                // Copy canvas content
+                const targetCanvas = div.querySelector('canvas');
+                targetCanvas.width = size;
+                targetCanvas.height = size;
+                const targetCtx = targetCanvas.getContext('2d');
+                targetCtx.drawImage(canvas, 0, 0);
+            });
+        }
+        
+        function downloadIcon(size) {
+            const canvas = document.getElementById(`canvas-${size}`);
+            const link = document.createElement('a');
+            link.download = `icon-${size}x${size}.png`;
+            link.href = canvas.toDataURL();
+            link.click();
+        }
+        
+        function downloadAllIcons() {
+            iconSizes.forEach(size => {
+                setTimeout(() => downloadIcon(size), size * 10);
+            });
+        }
+        
+        // Generate icons on page load
+        window.onload = generateAllIcons;
+    </script>
+</body>
+</html>

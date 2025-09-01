@@ -1,0 +1,35 @@
+{
+    "name": "ar-star-map",
+    "version": "1.0.0",
+    "description": "AR Star Map with real astronomical calculations",
+    "main": "index.html",
+    "scripts": {
+        "start": "python -m http.server 8000",
+        "dev": "npx serve .",
+        "build": "echo 'No build step needed for this PWA'",
+        "test": "echo 'No tests specified'"
+    },
+    "keywords": [
+        "astronomy",
+        "ar",
+        "augmented-reality",
+        "stars",
+        "constellations",
+        "pwa",
+        "progressive-web-app"
+    ],
+    "author": "Your Name",
+    "license": "MIT",
+    "dependencies": {
+        "astronomy-engine": "^2.1.19",
+        "csv-parser": "^3.2.0"
+    },
+    "repository": {
+        "type": "git",
+        "url": "https://github.com/yourusername/ar-star-map.git"
+    },
+    "bugs": {
+        "url": "https://github.com/yourusername/ar-star-map/issues"
+    },
+    "homepage": "https://github.com/yourusername/ar-star-map#readme"
+}

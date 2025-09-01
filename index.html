@@ -1,0 +1,2055 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>AR Star Map</title>
+    
+    <!-- PWA Meta Tags -->
+    <meta name="description" content="Explore the night sky with augmented reality - identify stars, constellations, and learn fascinating facts about celestial objects.">
+    <meta name="theme-color" content="#4fb3ff">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Star Map">
+    <meta name="mobile-web-app-capable" content="yes">
+    
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="manifest.json">
+    
+    <!-- App Icons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="icons/icon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="icons/icon-16x16.png">
+    <link rel="apple-touch-icon" href="icons/icon-152x152.png">
+    
+    <!-- Splash Screen for iOS -->
+    <link rel="apple-touch-startup-image" href="icons/icon-512x512.png">
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+            position: relative;
+            height: 100vh;
+            background: #000;
+            /* Prevent pull-to-refresh on mobile */
+            overscroll-behavior: none;
+            -webkit-overflow-scrolling: touch;
+        }
+
+        #camera-feed {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        #star-canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+
+        .star-marker {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            transform: translate(-50%, -50%);
+            cursor: pointer;
+            pointer-events: all;
+            transition: all 0.3s ease;
+        }
+
+        .star-marker:hover {
+            transform: translate(-50%, -50%) scale(1.5);
+        }
+
+        .star-dot {
+            width: 100%;
+            height: 100%;
+            border-radius: 50%;
+            background: white;
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.8);
+        }
+
+        .star-label {
+            position: absolute;
+            top: 25px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: white;
+            font-size: 12px;
+            white-space: nowrap;
+            text-shadow: 0 0 4px rgba(0, 0, 0, 0.8);
+            opacity: 0;
+            transition: opacity 0.3s;
+            pointer-events: none;
+        }
+
+        .star-marker:hover .star-label {
+            opacity: 1;
+        }
+
+        #info-panel {
+            position: absolute;
+            bottom: -100%;
+            left: 0;
+            right: 0;
+            background: linear-gradient(to bottom, rgba(0, 0, 20, 0.95), rgba(0, 0, 40, 0.98));
+            color: white;
+            padding: 25px;
+            border-radius: 25px 25px 0 0;
+            transition: bottom 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            max-height: 60vh;
+            overflow-y: auto;
+            backdrop-filter: blur(10px);
+            /* Safe area for notched devices */
+            padding-bottom: max(25px, env(safe-area-inset-bottom));
+        }
+
+        #info-panel.active {
+            bottom: 0;
+        }
+
+        #info-panel h2 {
+            margin: 0 0 10px 0;
+            font-size: 28px;
+            color: #4fb3ff;
+        }
+
+        .star-info {
+            margin: 15px 0;
+            line-height: 1.6;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            padding: 8px 0;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .info-label {
+            color: #888;
+            font-size: 14px;
+        }
+
+        .info-value {
+            color: #fff;
+            font-weight: 500;
+        }
+
+        .fun-fact {
+            background: rgba(79, 179, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            margin: 15px 0;
+            border-left: 3px solid #4fb3ff;
+        }
+
+        .close-btn {
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            width: 30px;
+            height: 30px;
+            background: rgba(255, 255, 255, 0.1);
+            border: none;
+            border-radius: 50%;
+            color: white;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #controls {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            z-index: 100;
+            /* Safe area for notched devices */
+            top: max(20px, env(safe-area-inset-top));
+            left: max(20px, env(safe-area-inset-left));
+        }
+
+        .control-btn {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            cursor: pointer;
+            margin-right: 10px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .control-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            transform: translateY(-1px);
+        }
+
+        #orientation-debug {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            color: white;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 10px;
+            border-radius: 5px;
+            font-size: 12px;
+            font-family: monospace;
+            /* Safe area for notched devices */
+            top: max(20px, env(safe-area-inset-top));
+            right: max(20px, env(safe-area-inset-right));
+        }
+
+        .constellation-line {
+            stroke: rgba(255, 255, 255, 0.3);
+            stroke-width: 1;
+            fill: none;
+        }
+
+        /* Install Prompt */
+        #install-prompt {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: linear-gradient(135deg, #4fb3ff, #3a8fd9);
+            color: white;
+            padding: 15px 25px;
+            border-radius: 25px;
+            box-shadow: 0 4px 20px rgba(79, 179, 255, 0.3);
+            z-index: 1000;
+            display: none;
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        #install-prompt.show {
+            display: block;
+            animation: slideUp 0.3s ease;
+        }
+
+        @keyframes slideUp {
+            from { transform: translateX(-50%) translateY(100px); opacity: 0; }
+            to { transform: translateX(-50%) translateY(0); opacity: 1; }
+        }
+
+        .install-btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            color: white;
+            padding: 8px 16px;
+            border-radius: 20px;
+            cursor: pointer;
+            margin-left: 15px;
+            font-size: 14px;
+            transition: all 0.3s ease;
+        }
+
+        .install-btn:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
+        .dismiss-btn {
+            background: none;
+            border: none;
+            color: rgba(255, 255, 255, 0.7);
+            font-size: 18px;
+            cursor: pointer;
+            margin-left: 15px;
+            padding: 0;
+            width: 20px;
+            height: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Loading Screen */
+        #loading-screen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg, #000428, #004e92);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            transition: opacity 0.5s ease;
+        }
+
+        .loading-spinner {
+            width: 60px;
+            height: 60px;
+            border: 4px solid rgba(255, 255, 255, 0.1);
+            border-top: 4px solid #4fb3ff;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .loading-text {
+            color: white;
+            font-size: 18px;
+            text-align: center;
+        }
+
+        /* Offline Indicator */
+        #offline-indicator {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            background: #ff6b6b;
+            color: white;
+            text-align: center;
+            padding: 8px;
+            font-size: 14px;
+            z-index: 1001;
+            display: none;
+        }
+
+        #offline-indicator.show {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <!-- Loading Screen -->
+    <div id="loading-screen">
+        <div class="loading-spinner"></div>
+        <div class="loading-text">Loading AR Star Map...</div>
+    </div>
+
+    <!-- Offline Indicator -->
+    <div id="offline-indicator">
+        ⚠️ You're offline - some features may be limited
+    </div>
+
+    <!-- Install Prompt -->
+    <div id="install-prompt">
+        <span>Add to Home Screen for the best experience</span>
+        <button class="install-btn" id="install-btn">Install</button>
+        <button class="dismiss-btn" onclick="dismissInstallPrompt()">×</button>
+    </div>
+
+    <video id="camera-feed" autoplay playsinline></video>
+    
+    <svg id="star-canvas"></svg>
+    
+    <div id="controls">
+        <button class="control-btn" onclick="toggleCamera()">Toggle Camera</button>
+        <button class="control-btn" onclick="toggleConstellations()">Toggle Lines</button>
+        <button class="control-btn" onclick="requestLocation()">Get Location</button>
+        <button class="control-btn" onclick="updateTime()">Update Time</button>
+    </div>
+
+    <div id="orientation-debug"></div>
+
+    <div id="info-panel">
+        <button class="close-btn" onclick="closeInfoPanel()">×</button>
+        <h2 id="star-name">Star Name</h2>
+        <div class="star-info">
+            <div class="info-row">
+                <span class="info-label">Distance</span>
+                <span class="info-value" id="star-distance">--</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Constellation</span>
+                <span class="info-value" id="star-constellation">--</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Magnitude</span>
+                <span class="info-value" id="star-magnitude">--</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Type</span>
+                <span class="info-value" id="star-type">--</span>
+            </div>
+        </div>
+        <div class="fun-fact">
+            <strong>Fun Fact:</strong>
+            <p id="star-fact">--</p>
+        </div>
+    </div>
+
+    <script type="module">
+        // Import astronomy-engine for real celestial calculations
+        import * as Astronomy from 'https://cdn.jsdelivr.net/npm/astronomy-engine@2.1.0/+esm';
+        
+        // PWA Variables
+        let deferredPrompt;
+        let isOnline = navigator.onLine;
+
+        // Sample star data - in a real app, this would come from a proper star catalog
+        const stars = [
+            [
+                    {
+                            "name": "Sol",
+                            "constellation": "Unknown",
+                            "ra": 0,
+                            "dec": 0,
+                            "magnitude": -26.7,
+                            "distance": "Unknown",
+                            "type": "G2V Star",
+                            "fact": "It's a G2V type star. ",
+                            "size": 5.9399999999999995
+                    },
+                    {
+                            "name": "Sirius",
+                            "constellation": "CMa",
+                            "ra": 101.287215,
+                            "dec": -16.716116,
+                            "magnitude": -1.44,
+                            "distance": "8.6 light years",
+                            "type": "A0m... Star",
+                            "fact": "This star is 8.6 light years away. It's a A0m... type star. Located in the constellation CMa.",
+                            "size": 0.888
+                    },
+                    {
+                            "name": "Canopus",
+                            "constellation": "Car",
+                            "ra": 95.98792499999999,
+                            "dec": -52.69566,
+                            "magnitude": -0.62,
+                            "distance": "309.0 light years",
+                            "type": "F0Ib Star",
+                            "fact": "This star is 309.0 light years away. It's a F0Ib type star. Located in the constellation Car.",
+                            "size": 0.724
+                    },
+                    {
+                            "name": "Arcturus",
+                            "constellation": "Boo",
+                            "ra": 213.91545,
+                            "dec": 19.18241,
+                            "magnitude": -0.05,
+                            "distance": "36.7 light years",
+                            "type": "K2IIIp Star",
+                            "fact": "This star is 36.7 light years away. It's a K2IIIp type star. Located in the constellation Boo.",
+                            "size": 0.61
+                    },
+                    {
+                            "name": "Rigil Kentaurus",
+                            "constellation": "Cen",
+                            "ra": 219.911475,
+                            "dec": -60.833976,
+                            "magnitude": -0.01,
+                            "distance": "4.3 light years",
+                            "type": "G2V Star",
+                            "fact": "This star is 4.3 light years away. It's a G2V type star. Located in the constellation Cen.",
+                            "size": 0.602
+                    },
+                    {
+                            "name": "Vega",
+                            "constellation": "Lyr",
+                            "ra": 279.2346,
+                            "dec": 38.783692,
+                            "magnitude": 0.03,
+                            "distance": "25.0 light years",
+                            "type": "A0Vvar Star",
+                            "fact": "This star is 25.0 light years away. It's a A0Vvar type star. Located in the constellation Lyr.",
+                            "size": 0.5940000000000001
+                    },
+                    {
+                            "name": "Capella",
+                            "constellation": "Aur",
+                            "ra": 79.17225,
+                            "dec": 45.997991,
+                            "magnitude": 0.08,
+                            "distance": "42.8 light years",
+                            "type": "M1: comp Star",
+                            "fact": "This star is 42.8 light years away. It's a M1: comp type star. Located in the constellation Aur.",
+                            "size": 0.584
+                    },
+                    {
+                            "name": "Rigel",
+                            "constellation": "Ori",
+                            "ra": 78.63447,
+                            "dec": -8.20164,
+                            "magnitude": 0.18,
+                            "distance": "862.4 light years",
+                            "type": "B8Ia Star",
+                            "fact": "This star is 862.4 light years away. It's a B8Ia type star. Located in the constellation Ori.",
+                            "size": 0.564
+                    },
+                    {
+                            "name": "Procyon",
+                            "constellation": "CMi",
+                            "ra": 114.825495,
+                            "dec": 5.224993,
+                            "magnitude": 0.4,
+                            "distance": "11.5 light years",
+                            "type": "F5IV-V Star",
+                            "fact": "This star is 11.5 light years away. It's a F5IV-V type star. Located in the constellation CMi.",
+                            "size": 0.52
+                    },
+                    {
+                            "name": "Achernar",
+                            "constellation": "Eri",
+                            "ra": 24.42834,
+                            "dec": -57.236757,
+                            "magnitude": 0.45,
+                            "distance": "139.4 light years",
+                            "type": "B3Vp Star",
+                            "fact": "This star is 139.4 light years away. It's a B3Vp type star. Located in the constellation Eri.",
+                            "size": 0.51
+                    },
+                    {
+                            "name": "Betelgeuse",
+                            "constellation": "Ori",
+                            "ra": 88.792935,
+                            "dec": 7.407063,
+                            "magnitude": 0.45,
+                            "distance": "497.7 light years",
+                            "type": "M2Ib Star",
+                            "fact": "This star is 497.7 light years away. It's a M2Ib type star. Located in the constellation Ori.",
+                            "size": 0.51
+                    },
+                    {
+                            "name": "Hadar",
+                            "constellation": "Cen",
+                            "ra": 210.955935,
+                            "dec": -60.373039,
+                            "magnitude": 0.61,
+                            "distance": "391.8 light years",
+                            "type": "B1III Star",
+                            "fact": "This star is 391.8 light years away. It's a B1III type star. Located in the constellation Cen.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Altair",
+                            "constellation": "Aql",
+                            "ra": 297.69582,
+                            "dec": 8.868322,
+                            "magnitude": 0.76,
+                            "distance": "16.7 light years",
+                            "type": "A7IV-V Star",
+                            "fact": "This star is 16.7 light years away. It's a A7IV-V type star. Located in the constellation Aql.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Acrux",
+                            "constellation": "Cru",
+                            "ra": 186.649665,
+                            "dec": -63.099092,
+                            "magnitude": 0.77,
+                            "distance": "321.8 light years",
+                            "type": "B0.5IV Star",
+                            "fact": "This star is 321.8 light years away. It's a B0.5IV type star. Located in the constellation Cru.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Aldebaran",
+                            "constellation": "Tau",
+                            "ra": 68.98015500000001,
+                            "dec": 16.509301,
+                            "magnitude": 0.87,
+                            "distance": "66.6 light years",
+                            "type": "K5III Star",
+                            "fact": "This star is 66.6 light years away. It's a K5III type star. Located in the constellation Tau.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Star 118360",
+                            "constellation": "Aur",
+                            "ra": 79.16889,
+                            "dec": 46.000842,
+                            "magnitude": 0.96,
+                            "distance": "42.2 light years",
+                            "type": "G0 III Star",
+                            "fact": "This star is 42.2 light years away. It's a G0 III type star. Located in the constellation Aur.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Spica",
+                            "constellation": "Vir",
+                            "ra": 201.298245,
+                            "dec": -11.161322,
+                            "magnitude": 0.98,
+                            "distance": "249.6 light years",
+                            "type": "B1V Star",
+                            "fact": "This star is 249.6 light years away. It's a B1V type star. Located in the constellation Vir.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Antares",
+                            "constellation": "Sco",
+                            "ra": 247.35191999999998,
+                            "dec": -26.432002,
+                            "magnitude": 1.06,
+                            "distance": "553.5 light years",
+                            "type": "M1Ib + B2.5V Star",
+                            "fact": "This star is 553.5 light years away. It's a M1Ib + B2.5V type star. Located in the constellation Sco.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Pollux",
+                            "constellation": "Gem",
+                            "ra": 116.329155,
+                            "dec": 28.026199,
+                            "magnitude": 1.16,
+                            "distance": "33.8 light years",
+                            "type": "K0IIIvar Star",
+                            "fact": "This star is 33.8 light years away. It's a K0IIIvar type star. Located in the constellation Gem.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Fomalhaut",
+                            "constellation": "PsA",
+                            "ra": 344.41256999999996,
+                            "dec": -29.622236,
+                            "magnitude": 1.17,
+                            "distance": "25.1 light years",
+                            "type": "A3V Star",
+                            "fact": "This star is 25.1 light years away. It's a A3V type star. Located in the constellation PsA.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Mimosa",
+                            "constellation": "Cru",
+                            "ra": 191.930385,
+                            "dec": -59.688764,
+                            "magnitude": 1.25,
+                            "distance": "278.4 light years",
+                            "type": "B0.5III Star",
+                            "fact": "This star is 278.4 light years away. It's a B0.5III type star. Located in the constellation Cru.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Deneb",
+                            "constellation": "Cyg",
+                            "ra": 310.35798,
+                            "dec": 45.280338,
+                            "magnitude": 1.25,
+                            "distance": "1411.3 light years",
+                            "type": "A2Ia Star",
+                            "fact": "This star is 1411.3 light years away. It's a A2Ia type star. Located in the constellation Cyg.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Toliman",
+                            "constellation": "Cen",
+                            "ra": 219.90519,
+                            "dec": -60.8383,
+                            "magnitude": 1.35,
+                            "distance": "4.3 light years",
+                            "type": "K1V Star",
+                            "fact": "This star is 4.3 light years away. It's a K1V type star. Located in the constellation Cen.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Regulus",
+                            "constellation": "Leo",
+                            "ra": 152.09298,
+                            "dec": 11.967207,
+                            "magnitude": 1.36,
+                            "distance": "79.3 light years",
+                            "type": "B7V Star",
+                            "fact": "This star is 79.3 light years away. It's a B7V type star. Located in the constellation Leo.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Adhara",
+                            "constellation": "CMa",
+                            "ra": 104.656455,
+                            "dec": -28.972084,
+                            "magnitude": 1.5,
+                            "distance": "405.0 light years",
+                            "type": "B2II Star",
+                            "fact": "This star is 405.0 light years away. It's a B2II type star. Located in the constellation CMa.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Castor",
+                            "constellation": "Gem",
+                            "ra": 113.64951,
+                            "dec": 31.888276,
+                            "magnitude": 1.58,
+                            "distance": "50.8 light years",
+                            "type": "A2Vm Star",
+                            "fact": "This star is 50.8 light years away. It's a A2Vm type star. Located in the constellation Gem.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Gacrux",
+                            "constellation": "Cru",
+                            "ra": 187.791435,
+                            "dec": -57.113212,
+                            "magnitude": 1.59,
+                            "distance": "88.5 light years",
+                            "type": "M4III Star",
+                            "fact": "This star is 88.5 light years away. It's a M4III type star. Located in the constellation Cru.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Shaula",
+                            "constellation": "Sco",
+                            "ra": 263.402175,
+                            "dec": -37.103821,
+                            "magnitude": 1.62,
+                            "distance": "570.9 light years",
+                            "type": "B1.5IV+... Star",
+                            "fact": "This star is 570.9 light years away. It's a B1.5IV+... type star. Located in the constellation Sco.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Bellatrix",
+                            "constellation": "Ori",
+                            "ra": 81.282765,
+                            "dec": 6.349702,
+                            "magnitude": 1.64,
+                            "distance": "252.3 light years",
+                            "type": "B2III Star",
+                            "fact": "This star is 252.3 light years away. It's a B2III type star. Located in the constellation Ori.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Elnath",
+                            "constellation": "Tau",
+                            "ra": 81.57297,
+                            "dec": 28.60745,
+                            "magnitude": 1.65,
+                            "distance": "133.8 light years",
+                            "type": "B7III Star",
+                            "fact": "This star is 133.8 light years away. It's a B7III type star. Located in the constellation Tau.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Miaplacidus",
+                            "constellation": "Car",
+                            "ra": 138.300615,
+                            "dec": -69.717208,
+                            "magnitude": 1.67,
+                            "distance": "113.1 light years",
+                            "type": "A2IV Star",
+                            "fact": "This star is 113.1 light years away. It's a A2IV type star. Located in the constellation Car.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Alnilam",
+                            "constellation": "Ori",
+                            "ra": 84.05338499999999,
+                            "dec": -1.20192,
+                            "magnitude": 1.69,
+                            "distance": "1975.8 light years",
+                            "type": "B0Ia Star",
+                            "fact": "This star is 1975.8 light years away. It's a B0Ia type star. Located in the constellation Ori.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Alnair",
+                            "constellation": "Gru",
+                            "ra": 332.058135,
+                            "dec": -46.960975,
+                            "magnitude": 1.73,
+                            "distance": "101.0 light years",
+                            "type": "B7IV Star",
+                            "fact": "This star is 101.0 light years away. It's a B7IV type star. Located in the constellation Gru.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Alnitak",
+                            "constellation": "Ori",
+                            "ra": 85.189695,
+                            "dec": -1.942572,
+                            "magnitude": 1.74,
+                            "distance": "735.9 light years",
+                            "type": "O9.5Ib SB Star",
+                            "fact": "This star is 735.9 light years away. It's a O9.5Ib SB type star. Located in the constellation Ori.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Star 39840",
+                            "constellation": "Vel",
+                            "ra": 122.38314,
+                            "dec": -47.336588,
+                            "magnitude": 1.75,
+                            "distance": "1116.4 light years",
+                            "type": "WC8 + O9I Star",
+                            "fact": "This star is 1116.4 light years away. It's a WC8 + O9I type star. Located in the constellation Vel.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Alioth",
+                            "constellation": "UMa",
+                            "ra": 193.50708,
+                            "dec": 55.959821,
+                            "magnitude": 1.76,
+                            "distance": "82.5 light years",
+                            "type": "A0p Star",
+                            "fact": "This star is 82.5 light years away. It's a A0p type star. Located in the constellation UMa.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Mirfak",
+                            "constellation": "Per",
+                            "ra": 51.08067,
+                            "dec": 49.86118,
+                            "magnitude": 1.79,
+                            "distance": "506.2 light years",
+                            "type": "F5Ib Star",
+                            "fact": "This star is 506.2 light years away. It's a F5Ib type star. Located in the constellation Per.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Kaus Australis",
+                            "constellation": "Sgr",
+                            "ra": 276.04302,
+                            "dec": -34.384616,
+                            "magnitude": 1.79,
+                            "distance": "143.2 light years",
+                            "type": "B9.5III Star",
+                            "fact": "This star is 143.2 light years away. It's a B9.5III type star. Located in the constellation Sgr.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Dubhe",
+                            "constellation": "UMa",
+                            "ra": 165.93232500000002,
+                            "dec": 61.751033,
+                            "magnitude": 1.81,
+                            "distance": "122.8 light years",
+                            "type": "F7V comp Star",
+                            "fact": "This star is 122.8 light years away. It's a F7V comp type star. Located in the constellation UMa.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Wezen",
+                            "constellation": "CMa",
+                            "ra": 107.097855,
+                            "dec": -26.3932,
+                            "magnitude": 1.83,
+                            "distance": "1605.9 light years",
+                            "type": "F8Ia Star",
+                            "fact": "This star is 1605.9 light years away. It's a F8Ia type star. Located in the constellation CMa.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Alkaid",
+                            "constellation": "UMa",
+                            "ra": 206.88531,
+                            "dec": 49.313265,
+                            "magnitude": 1.85,
+                            "distance": "103.9 light years",
+                            "type": "B3V SB Star",
+                            "fact": "This star is 103.9 light years away. It's a B3V SB type star. Located in the constellation UMa.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Avior",
+                            "constellation": "Car",
+                            "ra": 125.62853999999999,
+                            "dec": -59.509483,
+                            "magnitude": 1.86,
+                            "distance": "604.8 light years",
+                            "type": "K3III+B2V Star",
+                            "fact": "This star is 604.8 light years away. It's a K3III+B2V type star. Located in the constellation Car.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Sargas",
+                            "constellation": "Sco",
+                            "ra": 264.3297,
+                            "dec": -42.997824,
+                            "magnitude": 1.86,
+                            "distance": "300.2 light years",
+                            "type": "F1II Star",
+                            "fact": "This star is 300.2 light years away. It's a F1II type star. Located in the constellation Sco.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Menkalinan",
+                            "constellation": "Aur",
+                            "ra": 89.88223500000001,
+                            "dec": 44.947433,
+                            "magnitude": 1.9,
+                            "distance": "81.1 light years",
+                            "type": "A2V Star",
+                            "fact": "This star is 81.1 light years away. It's a A2V type star. Located in the constellation Aur.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Atria",
+                            "constellation": "TrA",
+                            "ra": 252.166155,
+                            "dec": -69.027715,
+                            "magnitude": 1.91,
+                            "distance": "390.4 light years",
+                            "type": "K2IIb-IIIa Star",
+                            "fact": "This star is 390.4 light years away. It's a K2IIb-IIIa type star. Located in the constellation TrA.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Alhena",
+                            "constellation": "Gem",
+                            "ra": 99.42792,
+                            "dec": 16.399252,
+                            "magnitude": 1.93,
+                            "distance": "109.2 light years",
+                            "type": "A0IV Star",
+                            "fact": "This star is 109.2 light years away. It's a A0IV type star. Located in the constellation Gem.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Alsephina",
+                            "constellation": "Vel",
+                            "ra": 131.175885,
+                            "dec": -54.708821,
+                            "magnitude": 1.93,
+                            "distance": "80.5 light years",
+                            "type": "A1V Star",
+                            "fact": "This star is 80.5 light years away. It's a A1V type star. Located in the constellation Vel.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Peacock",
+                            "constellation": "Pav",
+                            "ra": 306.411885,
+                            "dec": -56.73509,
+                            "magnitude": 1.94,
+                            "distance": "178.7 light years",
+                            "type": "B2IV Star",
+                            "fact": "This star is 178.7 light years away. It's a B2IV type star. Located in the constellation Pav.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Polaris",
+                            "constellation": "UMi",
+                            "ra": 37.94625,
+                            "dec": 89.264109,
+                            "magnitude": 1.97,
+                            "distance": "432.4 light years",
+                            "type": "F7:Ib-IIv SB Star",
+                            "fact": "This star is 432.4 light years away. It's a F7:Ib-IIv SB type star. Located in the constellation UMi.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Mirzam",
+                            "constellation": "CMa",
+                            "ra": 95.674935,
+                            "dec": -17.955918,
+                            "magnitude": 1.98,
+                            "distance": "492.4 light years",
+                            "type": "B1II/III Star",
+                            "fact": "This star is 492.4 light years away. It's a B1II/III type star. Located in the constellation CMa.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Alphard",
+                            "constellation": "Hya",
+                            "ra": 141.89685,
+                            "dec": -8.658603,
+                            "magnitude": 1.99,
+                            "distance": "180.2 light years",
+                            "type": "K3III Star",
+                            "fact": "This star is 180.2 light years away. It's a K3III type star. Located in the constellation Hya.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Hamal",
+                            "constellation": "Ari",
+                            "ra": 31.793325000000003,
+                            "dec": 23.462423,
+                            "magnitude": 2.01,
+                            "distance": "65.8 light years",
+                            "type": "K2III Star",
+                            "fact": "This star is 65.8 light years away. It's a K2III type star. Located in the constellation Ari.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Algieba",
+                            "constellation": "Leo",
+                            "ra": 154.99309499999998,
+                            "dec": 19.841489,
+                            "magnitude": 2.01,
+                            "distance": "130.0 light years",
+                            "type": "K0III Star",
+                            "fact": "This star is 130.0 light years away. It's a K0III type star. Located in the constellation Leo.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Diphda",
+                            "constellation": "Cet",
+                            "ra": 10.89735,
+                            "dec": -17.986605,
+                            "magnitude": 2.04,
+                            "distance": "96.3 light years",
+                            "type": "K0III Star",
+                            "fact": "This star is 96.3 light years away. It's a K0III type star. Located in the constellation Cet.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Nunki",
+                            "constellation": "Sgr",
+                            "ra": 283.81635,
+                            "dec": -26.296722,
+                            "magnitude": 2.05,
+                            "distance": "227.7 light years",
+                            "type": "B2.5V Star",
+                            "fact": "This star is 227.7 light years away. It's a B2.5V type star. Located in the constellation Sgr.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Menkent",
+                            "constellation": "Cen",
+                            "ra": 211.670925,
+                            "dec": -36.369954,
+                            "magnitude": 2.06,
+                            "distance": "58.8 light years",
+                            "type": "K0IIIb Star",
+                            "fact": "This star is 58.8 light years away. It's a K0IIIb type star. Located in the constellation Cen.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Alpheratz",
+                            "constellation": "And",
+                            "ra": 2.096865,
+                            "dec": 29.090432,
+                            "magnitude": 2.07,
+                            "distance": "97.0 light years",
+                            "type": "B9p Star",
+                            "fact": "This star is 97.0 light years away. It's a B9p type star. Located in the constellation And.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Mirach",
+                            "constellation": "And",
+                            "ra": 17.43291,
+                            "dec": 35.620558,
+                            "magnitude": 2.07,
+                            "distance": "197.3 light years",
+                            "type": "M0IIIvar Star",
+                            "fact": "This star is 197.3 light years away. It's a M0IIIvar type star. Located in the constellation And.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Saiph",
+                            "constellation": "Ori",
+                            "ra": 86.939115,
+                            "dec": -9.669605,
+                            "magnitude": 2.07,
+                            "distance": "646.8 light years",
+                            "type": "B0.5Iavar Star",
+                            "fact": "This star is 646.8 light years away. It's a B0.5Iavar type star. Located in the constellation Ori.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Kochab",
+                            "constellation": "UMi",
+                            "ra": 222.676575,
+                            "dec": 74.155505,
+                            "magnitude": 2.07,
+                            "distance": "130.9 light years",
+                            "type": "K4IIIvar Star",
+                            "fact": "This star is 130.9 light years away. It's a K4IIIvar type star. Located in the constellation UMi.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Tiaki",
+                            "constellation": "Gru",
+                            "ra": 340.666725,
+                            "dec": -46.884577,
+                            "magnitude": 2.07,
+                            "distance": "176.9 light years",
+                            "type": "M5III Star",
+                            "fact": "This star is 176.9 light years away. It's a M5III type star. Located in the constellation Gru.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Rasalhague",
+                            "constellation": "Oph",
+                            "ra": 263.733615,
+                            "dec": 12.560035,
+                            "magnitude": 2.08,
+                            "distance": "48.6 light years",
+                            "type": "A5III Star",
+                            "fact": "This star is 48.6 light years away. It's a A5III type star. Located in the constellation Oph.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Algol",
+                            "constellation": "Per",
+                            "ra": 47.04222,
+                            "dec": 40.955648,
+                            "magnitude": 2.09,
+                            "distance": "89.9 light years",
+                            "type": "B8V Star",
+                            "fact": "This star is 89.9 light years away. It's a B8V type star. Located in the constellation Per.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Almach",
+                            "constellation": "And",
+                            "ra": 30.97476,
+                            "dec": 42.329725,
+                            "magnitude": 2.1,
+                            "distance": "392.8 light years",
+                            "type": "B8V Star",
+                            "fact": "This star is 392.8 light years away. It's a B8V type star. Located in the constellation And.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Denebola",
+                            "constellation": "Leo",
+                            "ra": 177.26494499999998,
+                            "dec": 14.57206,
+                            "magnitude": 2.14,
+                            "distance": "35.9 light years",
+                            "type": "A3Vvar Star",
+                            "fact": "This star is 35.9 light years away. It's a A3Vvar type star. Located in the constellation Leo.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Cih",
+                            "constellation": "Cas",
+                            "ra": 14.177145,
+                            "dec": 60.71674,
+                            "magnitude": 2.15,
+                            "distance": "548.8 light years",
+                            "type": "B0IV:evar Star",
+                            "fact": "This star is 548.8 light years away. It's a B0IV:evar type star. Located in the constellation Cas.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Star 61739",
+                            "constellation": "Cen",
+                            "ra": 190.379565,
+                            "dec": -48.959888,
+                            "magnitude": 2.2,
+                            "distance": "130.1 light years",
+                            "type": "A1IV Star",
+                            "fact": "This star is 130.1 light years away. It's a A1IV type star. Located in the constellation Cen.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Naos",
+                            "constellation": "Pup",
+                            "ra": 120.896055,
+                            "dec": -40.003148,
+                            "magnitude": 2.21,
+                            "distance": "1083.1 light years",
+                            "type": "O5IAf Star",
+                            "fact": "This star is 1083.1 light years away. It's a O5IAf type star. Located in the constellation Pup.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Aspidiske",
+                            "constellation": "Car",
+                            "ra": 139.27257,
+                            "dec": -59.275229,
+                            "magnitude": 2.21,
+                            "distance": "765.3 light years",
+                            "type": "A8Ib Star",
+                            "fact": "This star is 765.3 light years away. It's a A8Ib type star. Located in the constellation Car.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Alphecca",
+                            "constellation": "CrB",
+                            "ra": 233.67192,
+                            "dec": 26.714693,
+                            "magnitude": 2.22,
+                            "distance": "75.0 light years",
+                            "type": "A0V Star",
+                            "fact": "This star is 75.0 light years away. It's a A0V type star. Located in the constellation CrB.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Suhail",
+                            "constellation": "Vel",
+                            "ra": 136.99902,
+                            "dec": -43.432589,
+                            "magnitude": 2.23,
+                            "distance": "544.2 light years",
+                            "type": "K4Ib-II Star",
+                            "fact": "This star is 544.2 light years away. It's a K4Ib-II type star. Located in the constellation Vel.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Mizar",
+                            "constellation": "UMa",
+                            "ra": 200.981205,
+                            "dec": 54.925362,
+                            "magnitude": 2.23,
+                            "distance": "85.8 light years",
+                            "type": "A2V Star",
+                            "fact": "This star is 85.8 light years away. It's a A2V type star. Located in the constellation UMa.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Sadr",
+                            "constellation": "Cyg",
+                            "ra": 305.557095,
+                            "dec": 40.256679,
+                            "magnitude": 2.23,
+                            "distance": "1831.5 light years",
+                            "type": "F8Ib Star",
+                            "fact": "This star is 1831.5 light years away. It's a F8Ib type star. Located in the constellation Cyg.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Schedar",
+                            "constellation": "Cas",
+                            "ra": 10.126740000000002,
+                            "dec": 56.537331,
+                            "magnitude": 2.24,
+                            "distance": "228.1 light years",
+                            "type": "K0II-IIIvar Star",
+                            "fact": "This star is 228.1 light years away. It's a K0II-IIIvar type star. Located in the constellation Cas.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Eltanin",
+                            "constellation": "Dra",
+                            "ra": 269.151555,
+                            "dec": 51.488895,
+                            "magnitude": 2.24,
+                            "distance": "154.2 light years",
+                            "type": "K5III Star",
+                            "fact": "This star is 154.2 light years away. It's a K5III type star. Located in the constellation Dra.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Mintaka",
+                            "constellation": "Ori",
+                            "ra": 83.001675,
+                            "dec": -0.299092,
+                            "magnitude": 2.25,
+                            "distance": "692.1 light years",
+                            "type": "O9.5II Star",
+                            "fact": "This star is 692.1 light years away. It's a O9.5II type star. Located in the constellation Ori.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Caph",
+                            "constellation": "Cas",
+                            "ra": 2.293305,
+                            "dec": 59.14978,
+                            "magnitude": 2.28,
+                            "distance": "54.7 light years",
+                            "type": "F2III-IV Star",
+                            "fact": "This star is 54.7 light years away. It's a F2III-IV type star. Located in the constellation Cas.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Star 66447",
+                            "constellation": "Cen",
+                            "ra": 204.97194000000002,
+                            "dec": -53.466394,
+                            "magnitude": 2.29,
+                            "distance": "427.3 light years",
+                            "type": "B1III Star",
+                            "fact": "This star is 427.3 light years away. It's a B1III type star. Located in the constellation Cen.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Dschubba",
+                            "constellation": "Sco",
+                            "ra": 240.08335499999998,
+                            "dec": -22.62171,
+                            "magnitude": 2.29,
+                            "distance": "491.0 light years",
+                            "type": "B0.2IV Star",
+                            "fact": "This star is 491.0 light years away. It's a B0.2IV type star. Located in the constellation Sco.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Larawag",
+                            "constellation": "Sco",
+                            "ra": 252.54119999999998,
+                            "dec": -34.293232,
+                            "magnitude": 2.29,
+                            "distance": "63.7 light years",
+                            "type": "K2IIIb Star",
+                            "fact": "This star is 63.7 light years away. It's a K2IIIb type star. Located in the constellation Sco.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Uridim",
+                            "constellation": "Lup",
+                            "ra": 220.482345,
+                            "dec": -47.3882,
+                            "magnitude": 2.3,
+                            "distance": "464.4 light years",
+                            "type": "B1.5III Star",
+                            "fact": "This star is 464.4 light years away. It's a B1.5III type star. Located in the constellation Lup.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Star 71125",
+                            "constellation": "Cen",
+                            "ra": 218.87679,
+                            "dec": -42.157824,
+                            "magnitude": 2.33,
+                            "distance": "305.5 light years",
+                            "type": "B1Vn + A Star",
+                            "fact": "This star is 305.5 light years away. It's a B1Vn + A type star. Located in the constellation Cen.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Merak",
+                            "constellation": "UMa",
+                            "ra": 165.46015500000001,
+                            "dec": 56.382427,
+                            "magnitude": 2.34,
+                            "distance": "79.7 light years",
+                            "type": "A1V Star",
+                            "fact": "This star is 79.7 light years away. It's a A1V type star. Located in the constellation UMa.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Izar",
+                            "constellation": "Boo",
+                            "ra": 221.24676,
+                            "dec": 27.074222,
+                            "magnitude": 2.35,
+                            "distance": "202.5 light years",
+                            "type": "A0 Star",
+                            "fact": "This star is 202.5 light years away. It's a A0 type star. Located in the constellation Boo.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Enif",
+                            "constellation": "Peg",
+                            "ra": 326.04649500000005,
+                            "dec": 9.875011,
+                            "magnitude": 2.38,
+                            "distance": "689.2 light years",
+                            "type": "K2Ibvar Star",
+                            "fact": "This star is 689.2 light years away. It's a K2Ibvar type star. Located in the constellation Peg.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Star 86403",
+                            "constellation": "Sco",
+                            "ra": 265.62198,
+                            "dec": -39.029983,
+                            "magnitude": 2.39,
+                            "distance": "483.0 light years",
+                            "type": "B1.5III Star",
+                            "fact": "This star is 483.0 light years away. It's a B1.5III type star. Located in the constellation Sco.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Ankaa",
+                            "constellation": "Phe",
+                            "ra": 6.5708400000000005,
+                            "dec": -42.305981,
+                            "magnitude": 2.4,
+                            "distance": "84.7 light years",
+                            "type": "K0III... Star",
+                            "fact": "This star is 84.7 light years away. It's a K0III... type star. Located in the constellation Phe.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Phecda",
+                            "constellation": "UMa",
+                            "ra": 178.45752000000002,
+                            "dec": 53.69476,
+                            "magnitude": 2.41,
+                            "distance": "83.1 light years",
+                            "type": "A0V SB Star",
+                            "fact": "This star is 83.1 light years away. It's a A0V SB type star. Located in the constellation UMa.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Sabik",
+                            "constellation": "Oph",
+                            "ra": 257.59452,
+                            "dec": -15.72491,
+                            "magnitude": 2.43,
+                            "distance": "88.3 light years",
+                            "type": "A2.5Va Star",
+                            "fact": "This star is 88.3 light years away. It's a A2.5Va type star. Located in the constellation Oph.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Scheat",
+                            "constellation": "Peg",
+                            "ra": 345.943515,
+                            "dec": 28.082789,
+                            "magnitude": 2.44,
+                            "distance": "195.9 light years",
+                            "type": "M2II-IIIvar Star",
+                            "fact": "This star is 195.9 light years away. It's a M2II-IIIvar type star. Located in the constellation Peg.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Aludra",
+                            "constellation": "CMa",
+                            "ra": 111.02376,
+                            "dec": -29.303104,
+                            "magnitude": 2.45,
+                            "distance": "1987.8 light years",
+                            "type": "B5Ia Star",
+                            "fact": "This star is 1987.8 light years away. It's a B5Ia type star. Located in the constellation CMa.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Alderamin",
+                            "constellation": "Cep",
+                            "ra": 319.64445,
+                            "dec": 62.585573,
+                            "magnitude": 2.45,
+                            "distance": "49.0 light years",
+                            "type": "A7IV-V Star",
+                            "fact": "This star is 49.0 light years away. It's a A7IV-V type star. Located in the constellation Cep.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Markeb",
+                            "constellation": "Vel",
+                            "ra": 140.52843000000001,
+                            "dec": -55.010668,
+                            "magnitude": 2.47,
+                            "distance": "571.9 light years",
+                            "type": "B2IV Star",
+                            "fact": "This star is 571.9 light years away. It's a B2IV type star. Located in the constellation Vel.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Aljanah",
+                            "constellation": "Cyg",
+                            "ra": 311.55267000000003,
+                            "dec": 33.970256,
+                            "magnitude": 2.48,
+                            "distance": "72.7 light years",
+                            "type": "K0III Star",
+                            "fact": "This star is 72.7 light years away. It's a K0III type star. Located in the constellation Cyg.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Markab",
+                            "constellation": "Peg",
+                            "ra": 346.19022,
+                            "dec": 15.205264,
+                            "magnitude": 2.49,
+                            "distance": "133.3 light years",
+                            "type": "B9.5III Star",
+                            "fact": "This star is 133.3 light years away. It's a B9.5III type star. Located in the constellation Peg.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Menkar",
+                            "constellation": "Cet",
+                            "ra": 45.56988,
+                            "dec": 4.089734,
+                            "magnitude": 2.54,
+                            "distance": "249.0 light years",
+                            "type": "M2III Star",
+                            "fact": "This star is 249.0 light years away. It's a M2III type star. Located in the constellation Cet.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Star 81130",
+                            "constellation": "Oph",
+                            "ra": 249.28974000000002,
+                            "dec": -10.56709,
+                            "magnitude": 2.54,
+                            "distance": "365.9 light years",
+                            "type": "O9.5V Star",
+                            "fact": "This star is 365.9 light years away. It's a O9.5V type star. Located in the constellation Oph.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Leepwal",
+                            "constellation": "Cen",
+                            "ra": 208.885005,
+                            "dec": -47.288375,
+                            "magnitude": 2.55,
+                            "distance": "381.7 light years",
+                            "type": "B2.5IV Star",
+                            "fact": "This star is 381.7 light years away. It's a B2.5IV type star. Located in the constellation Cen.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Zosma",
+                            "constellation": "Leo",
+                            "ra": 168.52706999999998,
+                            "dec": 20.523717,
+                            "magnitude": 2.56,
+                            "distance": "58.4 light years",
+                            "type": "A4V Star",
+                            "fact": "This star is 58.4 light years away. It's a A4V type star. Located in the constellation Leo.",
+                            "size": 0.5
+                    },
+                    {
+                            "name": "Acrab",
+                            "constellation": "Sco",
+                            "ra": 241.35930000000002,
+                            "dec": -19.805453,
+                            "magnitude": 2.56,
+                            "distance": "404.0 light years",
+                            "type": "B0.5V Star",
+                            "fact": "This star is 404.0 light years away. It's a B0.5V type star. Located in the constellation Sco.",
+                            "size": 0.5
+                    }
+            ]
+        ];
+
+        // Constellation lines (simplified connections between stars)
+        const constellationLines = [
+                        [
+                      {
+                                "from": "Betelgeuse",
+                                "to": "Rigel"
+                      },
+                      {
+                                "from": "Betelgeuse",
+                                "to": "Bellatrix"
+                      },
+                      {
+                                "from": "Rigel",
+                                "to": "Saiph"
+                      },
+                      {
+                                "from": "Dubhe",
+                                "to": "Merak"
+                      },
+                      {
+                                "from": "Merak",
+                                "to": "Phecda"
+                      },
+                      {
+                                "from": "Phecda",
+                                "to": "Megrez"
+                      },
+                      {
+                                "from": "Megrez",
+                                "to": "Alioth"
+                      },
+                      {
+                                "from": "Alioth",
+                                "to": "Mizar"
+                      },
+                      {
+                                "from": "Mizar",
+                                "to": "Alkaid"
+                      },
+                      {
+                                "from": "Schedar",
+                                "to": "Caph"
+                      },
+                      {
+                                "from": "Caph",
+                                "to": "Cih"
+                      },
+                      {
+                                "from": "Cih",
+                                "to": "Ruchbah"
+                      },
+                      {
+                                "from": "Ruchbah",
+                                "to": "Segin"
+                      },
+                      {
+                                "from": "Deneb",
+                                "to": "Sadr"
+                      },
+                      {
+                                "from": "Sadr",
+                                "to": "Gienah"
+                      },
+                      {
+                                "from": "Gienah",
+                                "to": "Albireo"
+                      },
+                      {
+                                "from": "Albireo",
+                                "to": "Deneb"
+                      }
+            ]
+        ];
+
+        let cameraStream = null;
+        let deviceAlpha = 0;
+        let deviceBeta = 90;
+        let deviceGamma = 0;
+        let showConstellations = true;
+        let starElements = [];
+
+        // PWA Functions
+        function registerServiceWorker() {
+            if ('serviceWorker' in navigator) {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((registration) => {
+                        console.log('SW registered: ', registration);
+                    })
+                    .catch((registrationError) => {
+                        console.log('SW registration failed: ', registrationError);
+                    });
+            }
+        }
+
+        function setupInstallPrompt() {
+            window.addEventListener('beforeinstallprompt', (e) => {
+                e.preventDefault();
+                deferredPrompt = e;
+                
+                // Show install prompt after a delay
+                setTimeout(() => {
+                    if (deferredPrompt) {
+                        document.getElementById('install-prompt').classList.add('show');
+                    }
+                }, 3000);
+            });
+        }
+
+        function installApp() {
+            if (deferredPrompt) {
+                deferredPrompt.prompt();
+                deferredPrompt.userChoice.then((choiceResult) => {
+                    if (choiceResult.outcome === 'accepted') {
+                        console.log('User accepted the install prompt');
+                    } else {
+                        console.log('User dismissed the install prompt');
+                    }
+                    deferredPrompt = null;
+                    document.getElementById('install-prompt').classList.remove('show');
+                });
+            }
+        }
+
+        function dismissInstallPrompt() {
+            document.getElementById('install-prompt').classList.remove('show');
+        }
+
+        function setupOnlineOffline() {
+            window.addEventListener('online', () => {
+                isOnline = true;
+                document.getElementById('offline-indicator').classList.remove('show');
+            });
+            
+            window.addEventListener('offline', () => {
+                isOnline = false;
+                document.getElementById('offline-indicator').classList.add('show');
+            });
+        }
+
+        async function initCamera() {
+            // Camera is blocked in this environment, so we'll use a starfield background
+            document.getElementById('camera-feed').style.display = 'none';
+            createStarfieldBackground();
+        }
+        
+        function createStarfieldBackground() {
+            const canvas = document.createElement('canvas');
+            canvas.style.position = 'absolute';
+            canvas.style.top = '0';
+            canvas.style.left = '0';
+            canvas.style.width = '100%';
+            canvas.style.height = '100%';
+            canvas.style.zIndex = '-1';
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            document.body.appendChild(canvas);
+            
+            const ctx = canvas.getContext('2d');
+            
+            // Create gradient background
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#000428');
+            gradient.addColorStop(1, '#004e92');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Add random background stars
+            for (let i = 0; i < 200; i++) {
+                const x = Math.random() * canvas.width;
+                const y = Math.random() * canvas.height;
+                const radius = Math.random() * 1.5;
+                const opacity = Math.random() * 0.8;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+                ctx.fill();
+            }
+        }
+
+        function initDeviceOrientation() {
+            // Use mouse/touch for demo since device orientation needs permissions
+            let isDragging = false;
+            let currentX = window.innerWidth / 2;
+            let currentY = window.innerHeight / 2;
+            
+            // Mouse controls
+            window.addEventListener('mousemove', (event) => {
+                if (!isDragging && !event.shiftKey) return;
+                
+                deviceAlpha = (event.clientX / window.innerWidth) * 120 - 60;
+                deviceBeta = 90 - (event.clientY / window.innerHeight) * 60;
+                updateStarPositions();
+                updateDebugInfo();
+            });
+            
+            // Touch controls for mobile
+            window.addEventListener('touchmove', (event) => {
+                const touch = event.touches[0];
+                deviceAlpha = (touch.clientX / window.innerWidth) * 120 - 60;
+                deviceBeta = 90 - (touch.clientY / window.innerHeight) * 60;
+                updateStarPositions();
+                updateDebugInfo();
+            });
+            
+            // Add instructions
+            const instructions = document.createElement('div');
+            instructions.style.cssText = `
+                position: absolute;
+                bottom: 20px;
+                left: 50%;
+                transform: translateX(-50%);
+                color: white;
+                background: rgba(0,0,0,0.5);
+                padding: 10px 20px;
+                border-radius: 20px;
+                font-size: 14px;
+                z-index: 1000;
+            `;
+            instructions.textContent = 'Hold Shift + Move mouse to look around (or tap/drag on mobile)';
+            document.body.appendChild(instructions);
+            
+            // Also still try device orientation for phones
+            if (window.DeviceOrientationEvent) {
+                window.addEventListener('deviceorientation', (event) => {
+                    if (event.alpha !== null) {
+                        deviceAlpha = event.alpha;
+                        deviceBeta = event.beta || 90;
+                        deviceGamma = event.gamma || 0;
+                        updateStarPositions();
+                        updateDebugInfo();
+                        instructions.style.display = 'none';
+                    }
+                });
+            }
+        }
+
+        function updateDebugInfo() {
+            const debug = document.getElementById('orientation-debug');
+            debug.innerHTML = `
+                Compass: ${Math.round(deviceAlpha)}°<br>
+                Tilt: ${Math.round(deviceBeta)}°<br>
+                Roll: ${Math.round(deviceGamma)}°<br>
+                Time: ${currentTime.toLocaleTimeString()}<br>
+                Lat: ${observerLat.toFixed(2)}°<br>
+                Lon: ${observerLon.toFixed(2)}°
+            `;
+        }
+
+        function updateTime() {
+            currentTime = new Date();
+            updateStarPositions();
+            updateDebugInfo();
+        }
+
+        // Observer location (will be updated when user provides location)
+        let observerLat = 40.7128; // Default: New York City
+        let observerLon = -74.0060;
+        let currentTime = new Date();
+
+        function calculateStarPosition(star) {
+            try {
+                // Create observer object
+                const observer = new Astronomy.Observer(observerLat, observerLon, 0);
+                
+                // Get current time
+                const time = new Astronomy.Time(currentTime);
+                
+                // Calculate where the star appears in the sky right now
+                const equ = new Astronomy.Equatorial(star.ra, star.dec, 0, 0, 0, 0);
+                const hor = Astronomy.EquatorToHorizon(time, observer, equ, Astronomy.Refraction.Normal);
+                
+                // Convert to screen coordinates
+                // Azimuth: 0° = North, 90° = East, 180° = South, 270° = West
+                // Altitude: 0° = horizon, 90° = zenith
+                
+                // Calculate difference from current device orientation
+                const azimuthDiff = (hor.azimuth - deviceAlpha + 360) % 360;
+                const altitudeDiff = hor.altitude - (deviceBeta - 90);
+                
+                // Convert to screen coordinates
+                const x = (azimuthDiff / 60) * window.innerWidth + window.innerWidth / 2;
+                const y = (-altitudeDiff / 60) * window.innerHeight + window.innerHeight / 2;
+                
+                // Check if star should be visible (within field of view and above horizon)
+                const visible = Math.abs(azimuthDiff) < 30 && 
+                              Math.abs(altitudeDiff) < 30 && 
+                              hor.altitude > -5; // 5° below horizon for atmospheric refraction
+                
+                return { 
+                    x, 
+                    y, 
+                    visible,
+                    azimuth: hor.azimuth,
+                    altitude: hor.altitude,
+                    magnitude: star.magnitude
+                };
+            } catch (error) {
+                console.error('Error calculating star position:', error);
+                // Fallback to simplified positioning
+                const azimuthDiff = (star.ra - deviceAlpha + 360) % 360;
+                const altitudeDiff = star.dec - (deviceBeta - 90);
+                
+                const x = (azimuthDiff / 60) * window.innerWidth + window.innerWidth / 2;
+                const y = (-altitudeDiff / 60) * window.innerHeight + window.innerHeight / 2;
+                
+                const visible = Math.abs(azimuthDiff) < 30 && Math.abs(altitudeDiff) < 30;
+                
+                return { x, y, visible, azimuth: star.ra, altitude: star.dec, magnitude: star.magnitude };
+            }
+        }
+
+        function createStarElement(star) {
+            const div = document.createElement('div');
+            div.className = 'star-marker';
+            
+            // Calculate current position for tooltip
+            const pos = calculateStarPosition(star);
+            
+            div.innerHTML = `
+                <div class="star-dot" style="
+                    width: ${star.size * 15}px; 
+                    height: ${star.size * 15}px;
+                    opacity: ${1 - (star.magnitude + 2) / 5};
+                "></div>
+                <div class="star-label">${star.name}</div>
+                <div class="star-tooltip" style="
+                    position: absolute;
+                    top: -60px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    background: rgba(0, 0, 0, 0.8);
+                    color: white;
+                    padding: 8px;
+                    border-radius: 5px;
+                    font-size: 10px;
+                    white-space: nowrap;
+                    opacity: 0;
+                    transition: opacity 0.3s;
+                    pointer-events: none;
+                    z-index: 1000;
+                ">
+                    Alt: ${pos.altitude ? pos.altitude.toFixed(1) + '°' : '--'}<br>
+                    Az: ${pos.azimuth ? pos.azimuth.toFixed(1) + '°' : '--'}
+                </div>
+            `;
+            
+            // Show tooltip on hover
+            div.addEventListener('mouseenter', () => {
+                const tooltip = div.querySelector('.star-tooltip');
+                if (tooltip) tooltip.style.opacity = '1';
+            });
+            
+            div.addEventListener('mouseleave', () => {
+                const tooltip = div.querySelector('.star-tooltip');
+                if (tooltip) tooltip.style.opacity = '0';
+            });
+            
+            div.onclick = () => showStarInfo(star);
+            document.body.appendChild(div);
+            return div;
+        }
+
+        function updateStarPositions() {
+            stars.forEach((star, index) => {
+                if (!starElements[index]) {
+                    starElements[index] = createStarElement(star);
+                }
+                
+                const pos = calculateStarPosition(star);
+                const element = starElements[index];
+                
+                if (pos.visible) {
+                    element.style.display = 'block';
+                    element.style.left = `${pos.x}px`;
+                    element.style.top = `${pos.y}px`;
+                } else {
+                    element.style.display = 'none';
+                }
+            });
+            
+            if (showConstellations) {
+                drawConstellationLines();
+            }
+        }
+
+        function drawConstellationLines() {
+            const svg = document.getElementById('star-canvas');
+            svg.innerHTML = ''; // Clear existing lines
+            
+            constellationLines.forEach(line => {
+                const fromStar = stars.find(s => s.name === line.from);
+                const toStar = stars.find(s => s.name === line.to);
+                
+                if (fromStar && toStar) {
+                    const fromPos = calculateStarPosition(fromStar);
+                    const toPos = calculateStarPosition(toStar);
+                    
+                    if (fromPos.visible && toPos.visible) {
+                        const svgLine = document.createElementNS("http://www.w3.org/2000/svg", "line");
+                        svgLine.setAttribute("x1", fromPos.x);
+                        svgLine.setAttribute("y1", fromPos.y);
+                        svgLine.setAttribute("x2", toPos.x);
+                        svgLine.setAttribute("y2", toPos.y);
+                        svgLine.setAttribute("class", "constellation-line");
+                        svg.appendChild(svgLine);
+                    }
+                }
+            });
+        }
+
+        function showStarInfo(star) {
+            document.getElementById('star-name').textContent = star.name;
+            document.getElementById('star-distance').textContent = star.distance;
+            document.getElementById('star-constellation').textContent = star.constellation;
+            document.getElementById('star-magnitude').textContent = star.magnitude;
+            document.getElementById('star-type').textContent = star.type;
+            document.getElementById('star-fact').textContent = star.fact;
+            document.getElementById('info-panel').classList.add('active');
+        }
+
+        function closeInfoPanel() {
+            document.getElementById('info-panel').classList.remove('active');
+        }
+
+        function toggleCamera() {
+            const video = document.getElementById('camera-feed');
+            if (video.style.display === 'none') {
+                video.style.display = 'block';
+                if (!cameraStream) initCamera();
+            } else {
+                video.style.display = 'none';
+            }
+        }
+
+        function toggleConstellations() {
+            showConstellations = !showConstellations;
+            if (!showConstellations) {
+                document.getElementById('star-canvas').innerHTML = '';
+            }
+        }
+
+        function requestLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        observerLat = position.coords.latitude;
+                        observerLon = position.coords.longitude;
+                        console.log('Location updated:', observerLat, observerLon);
+                        
+                        // Update star positions with new location
+                        updateStarPositions();
+                        
+                        // Show confirmation
+                        const locationInfo = document.createElement('div');
+                        locationInfo.style.cssText = `
+                            position: fixed;
+                            top: 50%;
+                            left: 50%;
+                            transform: translate(-50%, -50%);
+                            background: rgba(0, 0, 0, 0.9);
+                            color: white;
+                            padding: 20px;
+                            border-radius: 10px;
+                            text-align: center;
+                            z-index: 1000;
+                            font-size: 14px;
+                        `;
+                        locationInfo.innerHTML = `
+                            <div>📍 Location Updated!</div>
+                            <div style="margin-top: 10px; font-size: 12px; color: #4fb3ff;">
+                                ${observerLat.toFixed(4)}, ${observerLon.toFixed(4)}
+                            </div>
+                            <button onclick="this.parentElement.remove()" style="
+                                margin-top: 15px;
+                                background: #4fb3ff;
+                                border: none;
+                                color: white;
+                                padding: 8px 16px;
+                                border-radius: 5px;
+                                cursor: pointer;
+                            ">OK</button>
+                        `;
+                        document.body.appendChild(locationInfo);
+                        
+                        // Auto-remove after 3 seconds
+                        setTimeout(() => {
+                            if (locationInfo.parentElement) {
+                                locationInfo.remove();
+                            }
+                        }, 3000);
+                    },
+                    (error) => {
+                        console.error('Location error:', error);
+                        alert('Could not get location. Please check permissions.');
+                    }
+                );
+            } else {
+                alert('Geolocation not supported');
+            }
+        }
+
+        function hideLoadingScreen() {
+            setTimeout(() => {
+                document.getElementById('loading-screen').style.opacity = '0';
+                setTimeout(() => {
+                    document.getElementById('loading-screen').style.display = 'none';
+                }, 500);
+            }, 1000);
+        }
+
+        // Initialize everything
+        async function init() {
+            // PWA setup
+            registerServiceWorker();
+            setupInstallPrompt();
+            setupOnlineOffline();
+            
+            // App setup
+            await initCamera();
+            initDeviceOrientation();
+            updateStarPositions();
+            
+            // Start time updates (every 10 seconds)
+            setInterval(updateTime, 10000);
+            
+            // Hide loading screen
+            hideLoadingScreen();
+            
+            // Request permission for device orientation on iOS
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission();
+            }
+        }
+
+        // Event listeners
+        document.getElementById('install-btn').addEventListener('click', installApp);
+
+        // Start the app
+        init();
+    </script>
+</body>
+</html>
