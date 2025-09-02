@@ -2679,6 +2679,12 @@
 
         // IMMEDIATE TEST - This should work no matter what
         console.log('🚀 Stella debug script loaded!');
+        console.log('📱 Device info:', {
+            userAgent: navigator.userAgent,
+            platform: navigator.platform,
+            mobile: /Mobile|Android|iPhone|iPad/.test(navigator.userAgent),
+            viewport: `${window.innerWidth}x${window.innerHeight}`
+        });
         
         // Global error handler to catch any JavaScript errors
         window.addEventListener('error', (event) => {
@@ -2691,7 +2697,7 @@
             alert('Promise Error: ' + event.reason);
         });
         
-        // Add a simple button immediately
+        // Add a simple button immediately - MOBILE FRIENDLY
         const immediateButton = document.createElement('button');
         immediateButton.innerHTML = '🚨 EMERGENCY TEST';
         immediateButton.style.cssText = `
@@ -2699,21 +2705,55 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            padding: 20px 40px;
-            font-size: 24px;
+            padding: 30px 60px;
+            font-size: 28px;
             background: #ff0000;
             color: white;
             border: none;
-            border-radius: 20px;
+            border-radius: 25px;
             z-index: 99999;
             cursor: pointer;
+            touch-action: manipulation;
+            -webkit-tap-highlight-color: transparent;
+            box-shadow: 0 4px 20px rgba(255,0,0,0.6);
         `;
         immediateButton.onclick = () => {
             alert('Button works! Now testing stars...');
             testStarsImmediately();
         };
+        immediateButton.ontouchstart = () => {
+            alert('Touch detected! Button works on mobile!');
+            testStarsImmediately();
+        };
         document.body.appendChild(immediateButton);
         console.log('✅ Emergency test button added!');
+        
+        // Also add a mobile-specific test
+        if (/Mobile|Android|iPhone|iPad/.test(navigator.userAgent)) {
+            console.log('📱 Mobile device detected - adding mobile tests');
+            
+            // Add mobile info display
+            const mobileInfo = document.createElement('div');
+            mobileInfo.style.cssText = `
+                position: fixed;
+                top: 10px;
+                left: 10px;
+                background: rgba(0,0,0,0.8);
+                color: white;
+                padding: 15px;
+                border-radius: 10px;
+                font-size: 14px;
+                z-index: 99998;
+                max-width: 300px;
+            `;
+            mobileInfo.innerHTML = `
+                <strong>📱 Mobile Debug</strong><br>
+                Platform: ${navigator.platform}<br>
+                Viewport: ${window.innerWidth}x${window.innerHeight}<br>
+                User Agent: ${navigator.userAgent.substring(0, 50)}...
+            `;
+            document.body.appendChild(mobileInfo);
+        }
 
         function testStarsImmediately() {
             console.log('🧪 Testing stars immediately...');
