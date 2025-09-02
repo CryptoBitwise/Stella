@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="Permissions-Policy" content="accelerometer=*, gyroscope=*, magnetometer=*">
+    <title>Android Sensor Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            margin: 0;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        button {
+            padding: 20px 40px;
+            font-size: 20px;
+            background: white;
+            color: #667eea;
+            border: none;
+            border-radius: 30px;
+            margin: 10px;
+            cursor: pointer;
+        }
+        #data {
+            margin-top: 30px;
+            padding: 20px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 15px;
+            min-width: 300px;
+            text-align: center;
+        }
+        .value {
+            font-size: 24px;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <h1>Android Sensor Test</h1>
+    
+    <button onclick="requestAndroidPermissions()">Request Sensor Access</button>
+    <button onclick="testWithoutPermission()">Test Without Permission</button>
+    
+    <div id="data">
+        <div class="value">Alpha: <span id="alpha">--</span></div>
+        <div class="value">Beta: <span id="beta">--</span></div>
+        <div class="value">Gamma: <span id="gamma">--</span></div>
+        <div id="status">Ready to test</div>
+    </div>
+
+    <script>
+        let hasPermission = false;
+        
+        // Method 1: Direct sensor access (works on most Android)
+        function testWithoutPermission() {
+            document.getElementById('status').textContent = 'Starting sensors...';
+            
+            // Try multiple event types
+            let eventReceived = false;
+            
+            // Standard orientation
+            window.addEventListener('deviceorientation', handleOrientation);
+            
+            // Absolute orientation (Android Chrome)
+            window.addEventListener('deviceorientationabsolute', handleOrientation);
+            
+            // Motion events
+            window.addEventListener('devicemotion', (e) => {
+                if (e.rotationRate && e.rotationRate.alpha !== null) {
+                    document.getElementById('status').textContent = 'Motion detected!';
+                }
+            });
+            
+            setTimeout(() => {
+                if (!eventReceived) {
+                    document.getElementById('status').textContent = 'No sensor data. Try Request Access button.';
+                }
+            }, 2000);
+        }
+        
+        function handleOrientation(event) {
+            if (event.alpha !== null || event.beta !== null || event.gamma !== null) {
+                document.getElementById('alpha').textContent = event.alpha?.toFixed(1) ?? '--';
+                document.getElementById('beta').textContent = event.beta?.toFixed(1) ?? '--';
+                document.getElementById('gamma').textContent = event.gamma?.toFixed(1) ?? '--';
+                document.getElementById('status').textContent = '✅ Sensors working!';
+                hasPermission = true;
+            }
+        }
+        
+        // Method 2: Request permissions explicitly
+        async function requestAndroidPermissions() {
+            document.getElementById('status').textContent = 'Requesting permissions...';
+            
+            try {
+                // For Android Chrome 63+
+                if ('Accelerometer' in window) {
+                    // Use Generic Sensor API
+                    const acl = new Accelerometer({ frequency: 60 });
+                    acl.addEventListener('reading', () => {
+                        document.getElementById('status').textContent = 'Accelerometer access granted!';
+                    });
+                    acl.start();
+                }
+                
+                if ('Gyroscope' in window) {
+                    const gyro = new Gyroscope({ frequency: 60 });
+                    gyro.addEventListener('reading', () => {
+                        document.getElementById('status').textContent = 'Gyroscope access granted!';
+                    });
+                    gyro.start();
+                }
+                
+                // Also try Permissions API
+                if ('permissions' in navigator) {
+                    const perms = ['accelerometer', 'gyroscope', 'magnetometer'];
+                    for (const perm of perms) {
+                        try {
+                            const result = await navigator.permissions.query({ name: perm });
+                            console.log(`${perm}: ${result.state}`);
+                            if (result.state === 'prompt') {
+                                // This should trigger the permission prompt
+                                document.getElementById('status').textContent = `Check for ${perm} permission prompt`;
+                            }
+                        } catch (e) {
+                            console.log(`${perm} permission not supported`);
+                        }
+                    }
+                }
+                
+                // After requesting, try listening again
+                testWithoutPermission();
+                
+            } catch (error) {
+                document.getElementById('status').textContent = 'Error: ' + error.message;
+                console.error('Permission error:', error);
+                
+                // Fallback to basic events
+                testWithoutPermission();
+            }
+        }
+        
+        // Auto-start on page load
+        window.addEventListener('load', () => {
+            // First try without permission request
+            testWithoutPermission();
+        });
+        
+        // Show browser info
+        console.log('User Agent:', navigator.userAgent);
+        console.log('Secure Context:', window.isSecureContext);
+        console.log('DeviceOrientationEvent:', typeof DeviceOrientationEvent);
+        console.log('DeviceMotionEvent:', typeof DeviceMotionEvent);
+    </script>
+</body>
+</html>
