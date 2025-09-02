@@ -1589,6 +1589,129 @@
         let deviceGamma = 0;
         let showConstellations = true;
         let starElements = [];
+        
+        // Basic mobile compatibility check
+        try {
+            console.log('🚀 Stella script starting...');
+            console.log('📱 User Agent:', navigator.userAgent);
+            console.log('📱 Platform:', navigator.platform);
+            console.log('📱 Viewport:', window.innerWidth + 'x' + window.innerHeight);
+        } catch (error) {
+            console.error('❌ Error in basic script:', error);
+        }
+        
+        // Android emergency fallback - add visible text even if JavaScript fails
+        if (/Android/.test(navigator.userAgent)) {
+            console.log('🤖 Android detected - adding emergency fallback');
+            
+            // Add visible text to page immediately
+            const androidFallback = document.createElement('div');
+            androidFallback.innerHTML = `
+                <div style="
+                    position: fixed;
+                    top: 50%;
+                    left: 50%;
+                    transform: translate(-50%, -50%);
+                    background: rgba(255,0,0,0.9);
+                    color: white;
+                    padding: 30px;
+                    border-radius: 20px;
+                    text-align: center;
+                    z-index: 99999;
+                    font-size: 18px;
+                    max-width: 300px;
+                ">
+                    <h3>🤖 Android Device Detected</h3>
+                    <p>If you can see this, basic JavaScript is working!</p>
+                    <p>User Agent: ${navigator.userAgent.substring(0, 50)}...</p>
+                    <p>Platform: ${navigator.platform}</p>
+                    <p>Viewport: ${window.innerWidth}x${window.innerHeight}</p>
+                </div>
+            `;
+            document.body.appendChild(androidFallback);
+            console.log('✅ Android fallback added');
+        }
+        
+        // Force mobile compatibility
+        console.log('🚀 Stella script starting...');
+        
+        // Check if we're on mobile
+        const isMobile = /Mobile|Android|iPhone|iPad/.test(navigator.userAgent);
+        console.log('📱 Mobile detected:', isMobile);
+        
+        // Force mobile viewport
+        if (isMobile) {
+            console.log('📱 Setting mobile viewport...');
+            const viewport = document.querySelector('meta[name="viewport"]');
+            if (viewport) {
+                viewport.setAttribute('content', 'width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover');
+            }
+            
+                    // IMMEDIATE mobile test - add a simple button right away
+        console.log('📱 Adding immediate mobile test button...');
+        
+        // Android-specific test
+        if (/Android/.test(navigator.userAgent)) {
+            console.log('🤖 Android detected - adding Android test');
+            
+            // Try to create a simple element first
+            try {
+                const androidTest = document.createElement('div');
+                androidTest.innerHTML = '🤖 ANDROID TEST';
+                androidTest.style.cssText = `
+                    position: fixed;
+                    top: 50px;
+                    right: 20px;
+                    padding: 10px 20px;
+                    background: #ff6600;
+                    color: white;
+                    border: 2px solid white;
+                    border-radius: 10px;
+                    font-size: 16px;
+                    z-index: 99999;
+                `;
+                document.body.appendChild(androidTest);
+                console.log('✅ Android test element created');
+                
+                // Try to add a click event
+                androidTest.onclick = function() {
+                    alert('Android click works!');
+                };
+                
+                // Also try touch events
+                androidTest.ontouchstart = function() {
+                    alert('Android touch works!');
+                };
+                
+            } catch (error) {
+                console.error('❌ Android test failed:', error);
+                // Fallback - try to show error in page
+                document.body.innerHTML += '<div style="color: red; padding: 20px;">Android Error: ' + error.message + '</div>';
+            }
+        }
+        
+        const mobileTestBtn = document.createElement('button');
+        mobileTestBtn.innerHTML = '📱 MOBILE TEST';
+        mobileTestBtn.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px 30px;
+            background: #00ff00;
+            color: black;
+            border: none;
+            border-radius: 15px;
+            font-size: 18px;
+            z-index: 99999;
+            font-weight: bold;
+        `;
+        mobileTestBtn.onclick = () => {
+            alert('Mobile button works! JavaScript is loading on mobile!');
+            console.log('✅ Mobile button clicked successfully!');
+        };
+        document.body.appendChild(mobileTestBtn);
+        console.log('✅ Mobile test button added!');
+        }
 
         // PWA Functions
         // Comment out service worker registration until we fix it
